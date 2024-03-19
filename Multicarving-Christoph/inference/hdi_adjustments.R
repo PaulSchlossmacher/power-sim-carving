@@ -1,0 +1,1902 @@
+# this file contains functions adapted from the functions in hdi for multisplitting
+# making them applicable to multicarving
+
+multi.carve <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B) >= 0.05], FWER = TRUE, family = "gaussian",
+                        model.selector = lasso.cvcoef, args.model.selector = list(intercept = TRUE, standardize = FALSE),
+                        se.estimator = "1se", args.se.estimator = list(df.corr = FALSE, intercept = TRUE, standardize = FALSE),
+                        args.lasso.inference = list(sigma = NA, sig.level = 0.05, FWER = FWER, aggregation = min(gamma)),
+                        split.pval= TRUE, classical.fit = lm.pval.flex, args.classical.fit = NULL,
+                        parallel = FALSE, ncores = getOption("mc.cores", 2L), skip.variables = TRUE,
+                        return.nonaggr = FALSE, return.selmodels = FALSE, verbose = FALSE) {
+  # routine to split the data, select a model and calculate carving p-values B times
+  # Input
+  # x (matrix): matrix of predictors
+  # y (vector): response vector
+  # B (integer): number of splits
+  # fraction (numeric in (0,1)): fraction used for selection
+  # gamma (numeric or vector of numeric in (0,1]): quantiles to consider, if several, additional penalty is applied
+  # FWER (boolean): shall a FWER correction be applied
+  # family (string): "gaussian" or "binomial"
+  # model.selector (function): how the model is chosen (must be some version of Lasso)
+  # args.model.selector (list): additional arguments for the selection process
+  # se.estimator (string): how sigma is estimated, "1se", "modwise", "min" or "None"
+  # args.se.estimator (list): additional arguments to estimate sigma
+  # args.lasso.inference (list): additional arguments for inference after Lasso
+  # split.pval (boolean): shall p-values for splitting be determined as well
+  # classical.fit (function): function to calculate splitting p-values
+  # args.classical.fit (list): additional arguments for calculating splitting p-values
+  # parallel (boolean): whether to parallelize the splits
+  # ncores (integer): number of cores for parallelization
+  # skip.variables (boolean): shall carving p-values for variables selected less than min(gamma) * B times be omitted
+  # return.nonaggr (boolean): shall raw p-values be returned
+  # return.sel.models (boolean): shall the information, which model was selected be returned
+  # verbose (boolean): whether to print key steps
+  # Output (if split.pval = TRUE,  a list of two output elements is created)
+  # pval.corr (p - vector): multicarving / multisplitting p-values
+  # gamma.min (p - vector): which value of gamma minimized the p-value
+  # optional: pvals.nonaggr (B x p matrix): p-values before aggregation
+  # optional: sel.models (boolean B x p matrix): TRUE if variable was selected in given split
+  # FWER (boolean): was a multiplicity correction applied?
+  # method ("multi.carve" or "multi.split"): additional output information
+  # call: function call to obtain this carving result
+
+  
+  if (!(se.estimator %in% c("1se", "min", "modwise", "None")))
+    stop("Sigma estimator must be one of \"1se\", \"min\", \"modwise\" or \"None\" ")
+  
+  if (!(family %in% c("gaussian", "binomial")))
+    stop ("Invalid family provided, can only deal with gaussian and binomial")
+  
+  args.model.selector$family <- family
+  args.lasso.inference$family <- family
+  
+  if (is.null(args.lasso.inference$sigma)) args.lasso.inference$sigma <- NA
+  if (family == "gaussian"){
+    if (se.estimator == "None" && is.na(args.lasso.inference$sigma)) stop("Neither SE estimator type nor sigma provided for Gaussian family. This is not ok")
+    if (is.na(args.lasso.inference$sigma)) {
+      if (se.estimator %in% c("1se", "modwise")){
+        use.lambda.min = FALSE
+      } else {
+        use.lambda.min = TRUE
+      }
+      estSigma <- do.call(estimateSigma.flex,
+                          args = c(list(x = x, y = y, use.lambda.min = use.lambda.min), args.se.estimator))
+      globalSigma <- estSigma$sigmahat
+      args.lasso.inference$sigma <- globalSigma
+      args.classical.fit$Sigma <- globalSigma
+    } else {
+      # provided sigma has priority over se estimator
+      se.estimator <- "None"
+      globalSigma <- args.lasso.inference$sigma
+      args.classical.fit$Sigma <- globalSigma
+    }
+  }
+  
+  n <- nrow(x)
+  p <- ncol(x)
+  n.left <- floor(n * fraction)
+  n.right <- n - n.left
+  stopifnot(n.left >= 1, n.right >= 0)
+  oneSplit.select <- function(b) {
+    if (verbose) 
+      cat("...split", b, "\n")
+    sel.models <- logical(p)
+    try.again <- TRUE
+    split.count <- 0
+    thresh.count <- 0L
+    threshn <- 1e-7
+    continue <- TRUE
+    split.again <- TRUE
+    while (split.again) {
+      split.again <- FALSE
+      split <- sample.int(n, size = n.left)
+      x.left <- x[split, ]
+      y.left <- y[split]
+      x.right <- x[-split, ]
+      y.right <- y[-split]
+      
+      output <- do.call(model.selector, args = c(list(x = x.left, 
+                                                      y = y.left), args.model.selector))
+      sel.model <- output$sel.model
+      beta <- output$beta
+      lambda <- output$lambda
+      
+      fit.again <- TRUE
+      thresh.count <- 0
+      p.sel <- length(sel.model)
+      # for empty model, active constraints are trivially fulfilled
+      if (p.sel == 0) fit.again <- FALSE
+      
+      while (fit.again) {
+        fit.again <- FALSE
+        checktry <- tryCatch_W_E(constraint.checker(x.left, y.left, beta, 0, lambda,
+                                                    family, intercept = args.model.selector$intercept), TRUE)
+        if (is.null(checktry$error)) {
+          check <- checktry$value
+        } else {
+          # if run into numerical instability when checking constraints
+          check <- TRUE
+          split.again <- TRUE
+          warning(paste(checktry$error, p.sel, " variables selected with ",
+                        n.left, "data points, splitting again"))
+        }
+        if (!check) {
+          if (verbose) 
+            cat("......fit again...\n")
+          fit.again <- TRUE
+          thresh.count <- thresh.count + 1
+          if (thresh.count > 2) {
+            warning("Giving up reducing threshhold")
+            break()
+          }
+          threshn <- 1e-7 / (100) ^ thresh.count
+          fit <- glmnet(x = x.left, y = y.left, standardize = args.model.selector$standardize,
+                        intercept = args.model.selector$intercept, thresh = threshn,family = family)
+          if (verbose) cat(threshn,"\n")
+          coefs <- coef(fit,x = x.left,y = y.left,s = lambda/n.left,exact = TRUE,
+                        standardize = args.model.selector$standardize, 
+                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
+          beta <- coefs[-1]
+          sel.model <- which(abs(beta) > 0)
+          
+          if (family == "binomial") beta <- coefs
+          p.sel <- length(sel.model)
+          if (p.sel == 0) fit.again <- FALSE
+          warning(paste("reducing threshold", thresh.count, "to", threshn, sep = " "))
+        }
+      }
+      
+      p.sel <- length(sel.model)
+      # use new split in case of singularity. This is mostly an issue for discrete x.
+      if (args.model.selector$intercept) {
+        if ((p.sel > 0 && (rankMatrix(cbind(rep(1, n.left), x.left[, sel.model]))[[1]]< (p.sel + 1) ||
+                           (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[, sel.model]))[[1]] < (p.sel + 1)))) ||
+            fit.again) split.again <- TRUE
+      } else {
+        if ((p.sel > 1 && (rankMatrix(x.left[, sel.model])[[1]] < (p.sel) ||
+                           (p.sel < n.right  && rankMatrix(x.right[, sel.model])[[1]]< (p.sel)))) ||
+            fit.again) split.again <- TRUE
+      }
+      if (split.again) {
+        reason <- character(0)
+        if (args.model.selector$intercept){
+          if (rankMatrix(cbind(rep(1, n.left), x.left[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x2 rank")
+        } else {
+          if (rankMatrix( x.left[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right && rankMatrix(x.right[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x2 rank")
+        }
+        
+        if (fit.again) reason <- c(reason, "fit")
+        if (!is.null(checktry$error)) reason <- c(reason, "error while checking")
+        split.count <- split.count + 1
+        if (split.count > 4) {
+          stop(paste("More than 5 splits needed, final reason:", reason))
+        }
+        if (verbose) 
+          cat("......Splitting again...\n")
+        warning(paste("Splitting again ", split.count, "reason", reason))
+      }
+    }
+    sel.models[sel.model] <- TRUE
+    return (list(sel.models = sel.models, split = split, beta = beta, lambda = lambda, B = b))
+  }
+  sel.out <- if (parallel) {
+    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
+    if (verbose) 
+      cat("...starting parallelization of sample-splits for selection\n")
+    mclapply(1:B, oneSplit.select, mc.cores = ncores)
+  } else {
+    if (verbose) 
+      cat("...selecting models\n")
+    lapply(1:B, oneSplit.select)
+  }
+  if (skip.variables){
+    myExtract.sel <- function(name) {
+      matrix(unlist(lapply(sel.out, "[[", name)), nrow = B, 
+             byrow = TRUE)
+    }
+    sel.models <- myExtract.sel("sel.models")
+    times.selected <- apply(sel.models, 2, sum)
+    which.check <- which(times.selected >= min(gamma) * B)
+    if (sum(sel.models) > sum(sel.models[, which.check]))
+      warning(paste("Reducing number of tests from", sum(sel.models), "to", sum(sel.models[, which.check])))
+  } else {
+    which.check <- NULL
+  }
+  
+  oneSplit.infer <- function(sel) {
+    if (verbose) 
+      cat("...split", sel$B, "\n")
+    if (split.pval) {
+      pvals.v <- matrix(1, nrow = 2, ncol = p)
+    } else {
+      pvals.v <- rep(1, p)
+    }
+    sel.models <- sel$sel.models
+    sel.model <- which(sel.models)
+    p.sel <- length(sel.model)
+    beta <- sel$beta
+    split <- sel$split
+    lambda <- sel$lambda
+    
+    if (se.estimator == "modwise" && family == "gaussian") {
+      if (length(beta) == p + 1) beta <- beta[-1]
+      if (args.model.selector$intercept){
+        RSS <- sum((scale(y, T, F) - scale(x, T, F) %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel - 1
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      } else {
+        RSS <- sum((y- x %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      }
+      estSigma <- sigma.model
+      args.lasso.inference$sigma <- sigma.model
+      args.classical.fit$Sigma <- sigma.model
+    }
+    if (p.sel > 0) {
+      fLItry <- tryCatch_W_E(do.call(carve.lasso, args = c(list(X = x, y = y, ind = split, beta = beta, tol.beta = 0,
+                                                                      lambda = lambda, intercept = args.model.selector$intercept, which.check = which.check),
+                                                                 args.lasso.inference)), 0)
+      if (!is.null(fLItry$error)) {
+        warning(paste("Failed to infer a split, due to:", fLItry$error, sep=" "))
+        pvals.v[] = NA
+        list(pvals = pvals.v, sel.models = sel.models, 
+             split = split)
+      } else if (!is.null(fLItry$warning)) {
+        for (war in unique(fLItry$warning)) {
+          warning(paste("Split", sel$B, ":", war, sep = " "))
+        }
+      }
+      fLI <- fLItry$value
+      sel.pval1 <- fLI$pv
+      if (any(is.na(sel.pval1))) {
+        stop("The carve procedure returned a p-value NA")
+      } 
+      if (length(sel.pval1) != p.sel) { 
+        stop(paste("The carve procedure didn't return the correct number of p-values for the provided submodel. Expected",
+                   p.sel, "received", length(sel.pval1)))
+      }
+      if (!all(sel.pval1 >= 0 & sel.pval1 <= 1)) {
+        stop("The carve procedure returned values below 0 or above 1 as p-values")
+      }
+      if (FWER) {
+        sel.pval1 <- pmin(sel.pval1 * p.sel, 1) # for FWER
+      } else {
+        sel.pval1 <- pmin(sel.pval1, 1) # for FCR
+      }
+      if (split.pval) {
+        x.right <- x[-split, ]
+        y.right <- y[-split]
+        if (args.model.selector$intercept) {
+          bound <- n.right-1
+        } else {
+          bound <- n.right
+        }
+        if (p.sel < bound) {
+          sel.pval2try <- tryCatch_W_E(do.call(classical.fit, 
+                                               args = c(list(x = x.right[, sel.model], y = y.right), args.classical.fit)),
+                                       rep(NA, p.sel))
+          sel.pval2 <- sel.pval2try$value
+          if (!is.null(sel.pval2try$error)) {
+            warning(paste(sel.pval2try$error, "while caluclatng split p-values", sep=" "))
+          }
+          if (!is.null(sel.pval2try$warning)) {
+            for (war in unique(sel.pval2try$warning)) {
+              warning(paste(war, sep = " "))
+            }
+          }
+          NAs <- FALSE
+          if (any(is.na(sel.pval2))) NAs <- TRUE
+          # do not stop if splitting leads to NA
+          if (length(sel.pval2) != p.sel) 
+            stop("The classical.fit function didn't return the correct number of p-values for the provided submodel.")
+          if (!all(sel.pval2 >= 0 & sel.pval2 <= 1) && !NAs) 
+            stop("The classical.fit function returned values below 0 or above 1 as p-values")
+          if (FWER) {
+            sel.pval2 <- pmin(sel.pval2 * p.sel, 1) # for FWER
+          } else {
+            sel.pval2 <- pmin(sel.pval2, 1) # for FCR
+          }
+          pvals.v[1, sel.model] <- sel.pval1
+          pvals.v[2, sel.model] <- sel.pval2
+        } else {
+          # if split p-values can not be determined, leave them at 1
+          pvals.v[1,sel.model] <- sel.pval1
+        }
+      } else {
+        pvals.v[sel.model] <- sel.pval1
+      }
+      
+    }
+    
+    if (p.sel == 0) {
+      # leave all p-values to be 1
+      if (verbose) 
+        cat("......Empty model selected. That's ok...\n")
+    }
+    
+    
+    list(pvals = pvals.v, sel.models = sel.models, 
+         split = split)
+  }
+  inf.out <- if (parallel) {
+    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
+    if (verbose) 
+      cat("...starting parallelization of sample-splits for inference\n")
+    mclapply(sel.out, oneSplit.infer, mc.cores = ncores)
+  } else {
+    if (verbose) 
+      cat("...calculating p-values\n")
+    lapply(sel.out, oneSplit.infer)
+  }
+  myExtract <- function(name) {
+    matrix(unlist(lapply(inf.out, "[[", name)), nrow = B, 
+           byrow = TRUE)
+  }
+  if (split.pval) { 
+    ls <- list()
+    pvalsall <- array(unlist(lapply(inf.out, "[[", "pvals")), dim = c(2, p, B))
+    for (icf in  1:2) {
+      pvals <- t(pvalsall[icf, , ])
+      colnames(pvals) <- colnames(x)
+      if (return.selmodels) {
+        sel.models <- myExtract("sel.models")
+        colnames(sel.models) <- colnames(x)
+      } else {
+        sel.models <- NA
+      }
+      pvals.current <- which.gamma <- numeric(p)
+      for (j in 1:p) {
+        if (any(!is.na(pvals[, j]))) {
+          quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE, type = 3) / gamma
+          penalty <- if (length(gamma) > 1) 
+            (1 - log(min(gamma)))
+          else 1
+          pvals.pre <- min(quant.gamma) * penalty
+          pvals.current[j] <- pmin(pvals.pre, 1)
+          which.gamma[j] <- which.min(quant.gamma)
+        } else {
+          pvals.current[j] <- NA
+          which.gamma[j] <- NA
+        }
+      }
+      names(pvals.current) <- names(which.gamma) <- colnames(x)
+      
+      if (!return.nonaggr) 
+        pvals <- NA
+      if (return.selmodels) {
+        if (icf==2) {
+          keep <- c("return.selmodels", "x", "y", "gamma", "inf.out", 
+                    "pvals", "pvals.current", "which.gamma", "sel.models", "FWER","ls","icf")
+          rm(list = setdiff(names(environment()), keep))
+        }
+      }
+      method = "multi.carve"
+      if (icf == 2) method = "multi.split"
+      ls[[icf]] <- structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma],
+                                  pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                                  method = method, call = match.call()), class = "carve")
+      
+    }
+    return(ls)
+  } else {
+    pvals <- myExtract("pvals")
+    colnames(pvals) <- colnames(x)
+    if (return.selmodels) {
+      sel.models <- myExtract("sel.models")
+      colnames(sel.models) <- colnames(x)
+    } else {
+      sel.models <- NA
+    }
+    pvals.current <- which.gamma <- numeric(p)
+    for (j in 1:p) {
+      quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE, type = 3) / gamma
+      penalty <- if (length(gamma) > 1) 
+        (1 - log(min(gamma)))
+      else 1
+      pvals.pre <- min(quant.gamma) * penalty
+      pvals.current[j] <- pmin(pvals.pre, 1)
+      which.gamma[j] <- which.min(quant.gamma)
+    }
+    names(pvals.current) <- names(which.gamma) <- colnames(x)
+    if (!return.nonaggr) 
+      pvals <- NA
+    if (return.selmodels) {
+      keep <- c("return.selmodels", "x", "y", "gamma", "inf.out", 
+                "pvals", "pvals.current", "which.gamma", "sel.models", "FWER")
+      rm(list = setdiff(names(environment()), keep))
+    }
+    structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma],
+                   pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                   method = "multi.carve", call = match.call()), class = "carve")
+  }
+}
+
+carve100 <- function (x, y, FWER = TRUE, family = "gaussian", model.selector = lasso.cvcoef,
+                      args.model.selector = list(intercept = TRUE, standardize = FALSE, tol.beta = 1e-5),
+                      estimate.sigma = TRUE, df.corr = FALSE, args.lasso.inference = list(sigma = NA),
+                      return.selmodels = FALSE, verbose = FALSE) {
+  # routine to select a model and perform pure post-selection inference
+  # Input
+  # x (matrix): matrix of predictors
+  # y (vector): response vector
+  # FWER (boolean): shall a FWER correction be applied
+  # family (string): "gaussian" or "binomial"
+  # model.selector (function): how the model is chosen (must be some version of Lasso)
+  # args.model.selector (list): additional arguments for the selection process
+  # estimate.sigma (boolean): is sigma estimated on the provided submodel
+  # df.corr (boolean): is the number of selected variables taken into account to estimate sigma
+  # args.lasso.inference (list): additional arguments for inference after Lasso
+  # return.sel.models (boolean): shall the information, which model was selected be returned
+  # verbose (boolean): whether to print key steps
+  # Output
+  # pval.corr (p - vector): p-values from carve100
+  # optional: sel.models (boolean B x p matrix): TRUE if variable was selected in given split
+  # FWER (boolean): was a multiplicity correction applied?
+  # method ("carve100"): additional output information
+  # call: function call to obtain this carving result
+
+  if (!(family %in% c("gaussian", "binomial")))
+    stop ("Invalid family provided, can only deal with gaussian and binomial")
+  
+  args.model.selector$family <- family
+  args.lasso.inference$family <- family
+  
+  if (is.null(args.lasso.inference$sigma)) args.lasso.inference$sigma <- NA
+  if (family == "gaussian" && !estimate.sigma && is.na(args.lasso.inference$sigma)) stop("Sigma not provided and estimation not enabled for Gaussian family. This is not ok")
+  if (!is.na(args.lasso.inference$sigma)) estimate.sigma <- FALSE
+
+  n <- nrow(x)
+  p <- ncol(x)
+  pvals.v <- rep(1,p)
+  sel.models <- logical(p)
+
+  thresh.count <- 0L
+  threshn <- 1e-7
+  split.again <- FALSE
+  if (verbose) 
+    cat("...selecting model\n")
+  output <- do.call(model.selector, 
+                    args = c(list(x = x, y = y), args.model.selector))
+  sel.model <- output$sel.model
+  beta <- output$beta
+  lambda <- output$lambda
+
+  abort <- FALSE
+  fit.again <- TRUE
+  thresh.count <- 0
+  p.sel <- length(sel.model)
+  if (p.sel == 0) fit.again <- FALSE
+  
+  while (fit.again) {
+    fit.again <- FALSE
+    checktry <- tryCatch_W_E(constraint.checker(x, y, beta, 0, lambda, family,
+                                                intercept = args.model.selector$intercept), TRUE)
+    if (is.null(checktry$error)) {
+      check <- checktry$value
+    } else {
+      check <- TRUE
+      abort <- TRUE
+      warning(paste(checktry$error, p.sel, " variables selected with ",
+                    n, "data points, bad selection"))
+      break()
+    }
+    if (!check) {
+      fit.again <- TRUE
+      thresh.count <- thresh.count + 1
+      if (thresh.count > 2) {
+        warning("Giving up reducing threshhold")
+        abort <- TRUE
+        break()
+      }
+      threshn <- 1e-7 / (100) ^ thresh.count
+      fit <- glmnet(x = x, y = y, standardize = args.model.selector$standardize,
+                    intercept = args.model.selector$intercept, thresh = threshn,family = family)
+      cat(threshn, "\n")
+      coefs <- coef(fit, x = x,y = y, s = lambda / n, exact = TRUE, standardize = args.model.selector$standardize,
+                    intercept = args.model.selector$intercept, thresh = threshn, family = family)
+      beta <- coefs[-1]
+      
+      if (args.model.selector$intercept) {
+        sel.model <- which(abs(beta) > args.model.selector$tol.beta * sqrt(nrow(x) / colSums(scale(x, T, F) ^ 2))) # model indices
+      } else {
+        sel.model <- which(abs(beta) > args.model.selector$tol.beta * sqrt(nrow(x) / colSums(x ^ 2))) # model indices
+      }
+      
+      if (family == "binomial") beta <- coefs
+      p.sel <- length(sel.model)
+      if (p.sel == 0) fit.again <- FALSE
+      warning(paste("reducing threshold", thresh.count, "to", threshn))
+    }
+  }
+  if (abort) {
+    stop("Can not fit that data")
+  }
+  
+  p.sel <- length(sel.model)
+  if (args.model.selector$intercept) {
+    if ((p.sel > 1 && (rankMatrix(cbind(rep(1, n), x[, sel.model]))[[1]] < (p.sel + 1))) ||
+        fit.again) abort <- TRUE
+  } else {
+    if ((p.sel > 1 && (rankMatrix(x[, sel.model])[[1]] < (p.sel))) ||
+        fit.again) abort <- TRUE
+  }
+  if (abort) {
+    stop("Can not fit that data")
+  }
+  
+  if (verbose) 
+    cat("...calculating p-values\n")
+  if (estimate.sigma && family == "gaussian") {
+    if (length(beta) == p + 1) beta <- beta[-1]
+    if (args.model.selector$intercept){
+      RSS <- sum((scale(y, T, F) - scale(x, T, F) %*% beta) ^ 2)
+      if (df.corr) {
+        den <- n - p.sel - 1
+      } else {
+        den <- n
+      }
+      sigma.model <- sqrt(RSS / den)
+    } else {
+      RSS <- sum((y- x %*% beta) ^ 2)
+      if (df.corr) {
+        den <- n - p.sel
+      } else {
+        den <- n
+      }
+      sigma.model <- sqrt(RSS / den)
+    }
+    args.lasso.inference$sigma <- sigma.model
+  }
+  if (p.sel > 0) {
+    if (length(beta) == p+1 && family == "gaussian") beta <- beta[-1]
+    fLItry <- tryCatch_W_E(do.call(fixedLassoInf, args = c(list(x = x, y = y, beta = beta, 
+                                                                tol.beta = args.model.selector$tol.beta,
+                                                                lambda = lambda, intercept = args.model.selector$intercept),
+                                                           args.lasso.inference)), 0)
+    if (!is.null(fLItry$error)) {
+      stop(paste(fLItry$error, "stopping carve100", sep=" "))
+    } else if (!is.null(fLItry$warning)) {
+      war <- unique(fLItry$warning)
+      stop(paste(war, "stopping carve100", sep = " "))
+    }
+    fLI <- fLItry$value
+    if (p.sel > 0 && p.sel < nrow(x) - 1) {
+      sel.pval1 <- fLI$pv
+      if (any(is.na(sel.pval1))) 
+        stop("The carve 100 procedure returned a p-value NA")
+      if (length(sel.pval1) != p.sel) { 
+        stop(paste("The carve 100 procedure didn't return the correct number of p-values for the provided submodel. Expected",
+                   p.sel, "received", length(sel.pval1)))
+      }
+      if (!all(sel.pval1 >= 0 & sel.pval1 <= 1)) 
+        stop("The carve 100 procedure returned values below 0 or above 1 as p-values")
+      if (FWER) {
+        sel.pval1 <- pmin(sel.pval1 * p.sel, 1) #for FWER
+      } else {
+        sel.pval1 <- pmin(sel.pval1, 1) #for FCR
+      }
+      pvals.v[sel.model] <- sel.pval1
+      
+      if (return.selmodels) 
+        sel.models[sel.model] <- TRUE
+      }
+  }
+  
+  if (p.sel == 0) {
+    if (verbose) 
+      cat("......Empty model selected. That's ok...\n")
+  }
+  pvals <- pvals.v
+  colnames(pvals) <- colnames(x)
+  if (return.selmodels) {
+    colnames(sel.models) <- colnames(x)
+  } else {
+    sel.models <- NA
+  }
+  
+  if (return.selmodels) {
+    keep <- c("return.selmodels", "x", "y", 
+              "pvals", "sel.models", "FWER")
+    rm(list = setdiff(names(environment()), keep))
+  }
+  structure(list(pval.corr = pvals, sel.models = sel.models,  FWER= FWER,
+                 method = "carve100", call = match.call()), class = "carve")
+}
+
+multi.carve.group <- function (x, y, groups, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B) >= 0.05], FWER = FALSE, family = "gaussian", 
+                               model.selector = lasso.cvcoef, args.model.selector = list(intercept = TRUE, standardize = FALSE),
+                               se.estimator = "1se", args.se.estimator = list(df.corr = FALSE, intercept = TRUE, standardize = FALSE),
+                               args.lasso.inference = list(sigma = NA, sig.level = 0.05, FWER = FWER, aggregation = min(gamma)),
+                               parallel = FALSE, ncores = getOption("mc.cores", 2L), skip.groups = TRUE,
+                               return.nonaggr = FALSE, return.selmodels = FALSE, verbose = FALSE) {
+  
+  # routine to split the data, select a model and calculate carving p-values for groups B times
+  # Input
+  # x (matrix): matrix of predictors
+  # y (vector): response vector
+  # groups (list of vectors of indices): groups for which a p-value shall be determined
+  # B (integer): number of splits
+  # fraction (numeric in (0,1]): fraction used for selection
+  # gamma (numeric or vector of numeric in (0,1]): quantiles to consider, if several, additional penalty is applied
+  # FWER (boolean): shall a FWER correction be applied
+  # family (string): "gaussian" or "binomial"
+  # model.selector (function): how the model is chosen (must be some version of Lasso)
+  # args.model.selector (list): additional arguments for the selection process
+  # se.estimator (string): how sigma is estimated, "1se", "modwise", "min" or "None"
+  # args.se.estimator (list): additional arguments to estimate sigma
+  # args.lasso.inference (list): additional arguments for inference after Lasso
+  # parallel (boolean): whether to parallelize the splits
+  # ncores (integer): number of cores for parallelization
+  # skip.groups (boolean): shall carving p-values for groups selected less than min(gamma) * B times be omitted
+  # return.nonaggr (boolean): shall raw p-values be returned
+  # return.sel.models (boolean): shall the information, which model was selected be returned
+  # verbose (boolean): whether to print key steps
+  # Output (let g be the number of groups)
+  # pval.corr (g - vector): multicarving p-values
+  # gamma.min (g - vector): which value of gamma minimized the p-value
+  # optional: pvals.nonaggr (B x g matrix): p-values before aggregation
+  # optional: sel.models (boolean B x p matrix): TRUE if variable was selected in given split
+  # FWER (boolean): was a multiplicity correction applied?
+  # method ("multi.carve.group"): additional output information
+  # call: function call to obtain this carving result
+  
+  if (!(se.estimator %in% c("1se", "min", "modwise", "None")))
+    stop("Sigma estimator must be one of \"1se\", \"min\", \"modwise\" or \"None\" ")
+  
+  if (!(family %in% c("gaussian", "binomial")))
+    stop ("Invalid family provided, can only deal with gaussian and binomial")
+  
+  args.lasso.inference$family <- family
+  args.model.selector$family <- family
+  
+  if (is.null(args.lasso.inference$sigma)) args.lasso.inference$sigma <- NA
+  if (family == "gaussian"){
+    if (se.estimator == "None" && is.na(args.lasso.inference$sigma)) stop("Neither SE estimator type nor sigma provided for Gaussian family. This is not ok")
+    if (is.na(args.lasso.inference$sigma)) {
+      if (se.estimator %in% c("1se", "modwise")){
+        use.lambda.min = FALSE
+      } else {
+        use.lambda.min = TRUE
+      }
+      estSigma <- do.call(estimateSigma.flex,
+                          args = c(list(x = x, y = y, use.lambda.min = use.lambda.min), args.se.estimator))
+      globalSigma <- estSigma$sigmahat
+      args.lasso.inference$sigma <- globalSigma
+    } else {
+      # provided sigma has priority over se estimator
+      se.estimator <- "None"
+      globalSigma <- args.lasso.inference$sigma
+    }
+  }
+  
+  n <- nrow(x)
+  p <- ncol(x)
+  ngroup <- length(groups)
+  n.left <- floor(n * fraction)
+  n.right <- n - n.left
+  stopifnot(n.left >= 1, n.right >= 0)
+  oneSplit.select <- function(b) {
+    if (verbose) 
+      cat("...split", b, "\n")
+    sel.models <- logical(p)
+    try.again <- TRUE
+    split.count <- 0
+    thresh.count <- 0L
+    threshn <- 1e-7
+    continue <- TRUE
+    split.again <- TRUE
+    while (split.again) {
+      split.again <- FALSE
+      split <- sample.int(n, size = n.left)
+      x.left <- x[split, ]
+      y.left <- y[split]
+      x.right <- x[-split, ]
+      y.right <- y[-split]
+      
+      output <- do.call(model.selector, args = c(list(x = x.left, 
+                                                      y = y.left), args.model.selector))
+      sel.model <- output$sel.model
+      beta <- output$beta
+      lambda <- output$lambda
+      
+      fit.again <- TRUE
+      thresh.count <- 0
+      p.sel <- length(sel.model)
+      # for empty model, active constraints are trivially fulfilled
+      if (p.sel == 0) fit.again <- FALSE
+      
+      while (fit.again) {
+        fit.again <- FALSE
+        checktry <- tryCatch_W_E(constraint.checker(x.left, y.left, beta, 0, lambda,
+                                                    family, intercept = args.model.selector$intercept), TRUE)
+        if (is.null(checktry$error)) {
+          check <- checktry$value
+        } else {
+          # if run into numerical instability when checking constraints
+          check <- TRUE
+          split.again <- TRUE
+          warning(paste(checktry$error, p.sel, " variables selected with ",
+                        n.left, "data points, splitting again"))
+        }
+        if (!check) {
+          if (verbose) 
+            cat("......fit again...\n")
+          fit.again <- TRUE
+          thresh.count <- thresh.count + 1
+          if (thresh.count > 2) {
+            warning("Giving up reducing threshhold")
+            break()
+          }
+          threshn <- 1e-7 / (100) ^ thresh.count
+          fit <- glmnet(x = x.left, y = y.left, standardize = args.model.selector$standardize,
+                        intercept = args.model.selector$intercept, thresh = threshn,family = family)
+          if (verbose) cat(threshn,"\n")
+          coefs <- coef(fit,x = x.left,y = y.left,s = lambda/n.left,exact = TRUE,
+                        standardize = args.model.selector$standardize, 
+                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
+          beta <- coefs[-1]
+          sel.model <- which(abs(beta) > 0)
+          
+          if (family == "binomial") beta <- coefs
+          p.sel <- length(sel.model)
+          if (p.sel == 0) fit.again <- FALSE
+          warning(paste("reducing threshold", thresh.count, "to", threshn, sep = " "))
+        }
+      }
+      
+      p.sel <- length(sel.model)
+      # use new split in case of singularity. This is mostly an issue for discrete x.
+      if (args.model.selector$intercept) {
+        if ((p.sel > 0 && (rankMatrix(cbind(rep(1, n.left), x.left[, sel.model]))[[1]]< (p.sel + 1) ||
+                           (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[, sel.model]))[[1]] < (p.sel + 1)))) ||
+            fit.again) split.again <- TRUE
+      } else {
+        if ((p.sel > 1 && (rankMatrix(x.left[, sel.model])[[1]] < (p.sel) ||
+                           (p.sel < n.right  && rankMatrix(x.right[, sel.model])[[1]]< (p.sel)))) ||
+            fit.again) split.again <- TRUE
+      }
+      if (split.again) {
+        reason <- character(0)
+        if (args.model.selector$intercept){
+          if (rankMatrix(cbind(rep(1, n.left), x.left[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x2 rank")
+        } else {
+          if (rankMatrix( x.left[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right && rankMatrix(x.right[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x2 rank")
+        }
+        
+        if (fit.again) reason <- c(reason, "fit")
+        if (!is.null(checktry$error)) reason <- c(reason, "error while checking")
+        split.count <- split.count + 1
+        if (split.count > 4) {
+          stop(paste("More than 5 splits needed, final reason:", reason))
+        }
+        if (verbose) 
+          cat("......Splitting again...\n")
+        warning(paste("Splitting again ", split.count, "reason", reason))
+      }
+    }
+    sel.models[sel.model] <- TRUE
+    return (list(sel.models = sel.models, split = split, beta = beta, lambda = lambda, B = b))
+  }
+  sel.out <- if (parallel) {
+    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
+    if (verbose) 
+      cat("...starting parallelization of sample-splits for selection\n")
+    mclapply(1:B, oneSplit.select, mc.cores = ncores)
+  } else {
+    if (verbose) 
+      cat("...selecting models\n")
+    lapply(1:B, oneSplit.select)
+  }
+  if (skip.groups){
+    myExtract.sel <- function(name) {
+      matrix(unlist(lapply(sel.out, "[[", name)), nrow = B, 
+             byrow = TRUE)
+    }
+    sel.models <- myExtract.sel("sel.models")
+    sel.groups <- matrix(FALSE, ncol = length(groups), nrow = B)
+    for (i in 1:B) {
+      j <- 0
+      for (group in groups){
+        j <- j + 1
+        sel.groups[i, j] <- sum(sel.models[i, group]) > 0
+      }
+    }
+    times.selected <- apply(sel.groups, 2, sum)
+    which.check <- which(times.selected >= min(gamma) * B)
+    if (sum(sel.groups) > sum(sel.groups[, which.check]))
+      warning(paste("Reducing number of tests from", sum(sel.groups), "to", sum(sel.groups[, which.check])))
+  } else {
+    which.check <- NULL
+  }
+  
+  oneSplit.infer <- function(sel) {
+    if (verbose) 
+      cat("...split", sel$B, "\n")
+    pvals.v <- rep(1, ngroup)
+    sel.models <- sel$sel.models
+    sel.model <- which(sel.models)
+    p.sel <- length(sel.model)
+    beta <- sel$beta
+    split <- sel$split
+    lambda <- sel$lambda
+    ngrouptested <- sum(unlist(lapply(lapply(groups, intersect, sel.model), length)) > 0)
+    if (se.estimator == "modwise" && family == "gaussian") {
+      if (length(beta) == p + 1) beta <- beta[-1]
+      if (args.model.selector$intercept){
+        RSS <- sum((scale(y, T, F) - scale(x, T, F) %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel - 1
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      } else {
+        RSS <- sum((y- x %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      }
+      estSigma <- sigma.model
+      args.lasso.inference$sigma <- sigma.model
+    }
+    if (ngrouptested > 0) {
+      fLItry <- tryCatch_W_E(do.call(carve.lasso.group, args = c(list(X = x, y = y, ind = split, beta = beta, tol.beta = 0,
+                                                                      lambda = lambda, intercept = args.model.selector$intercept, groups = groups, which.check = which.check),
+                                                                 args.lasso.inference)), 0)
+      if (!is.null(fLItry$error)) {
+        warning(paste("Failed to infer a split, due to:", fLItry$error, sep=" "))
+        pvals.v[] = NA
+        list(pvals = pvals.v, sel.models = sel.models, 
+             split = split)
+      } else if (!is.null(fLItry$warning)) {
+        for (war in unique(fLItry$warning)) {
+          warning(paste("Split", sel$B, ":", war, sep = " "))
+        }
+      }
+      fLI <- fLItry$value
+      sel.pval1 <- fLI$pv
+      if (any(is.na(sel.pval1))) {
+        stop("The carve procedure returned a p-value NA")
+      } 
+      if (length(sel.pval1) != length(groups)) { 
+        stop(paste("The carve procedure didn't return the correct number of p-values for the provided groups. Expected",
+                   length(groups), "received", length(sel.pval1)))
+      }
+      if (!all(sel.pval1 >= 0 & sel.pval1 <= 1)) {
+        stop("The carve procedure returned values below 0 or above 1 as p-values")
+      }
+      if (FWER) {
+        sel.pval1 <- pmin(sel.pval1 * ngrouptested, 1) #for FWER
+      } else {
+        sel.pval1 <- pmin(sel.pval1, 1) #for FCR
+      }
+      pvals.v <- sel.pval1
+
+      
+    }
+    
+    if (ngrouptested == 0) {
+      # leave all p-values to be 1
+      if (verbose) 
+        cat("......No variable from the groups selected. That's ok...\n")
+    }
+    
+    
+    list(pvals = pvals.v, sel.models = sel.models, 
+         split = split)
+  }
+  inf.out <- if (parallel) {
+    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
+    if (verbose) 
+      cat("...starting parallelization of sample-splits for inference\n")
+    mclapply(sel.out, oneSplit.infer, mc.cores = ncores)
+  } else {
+    if (verbose) 
+      cat("...calculating p-values\n")
+    lapply(sel.out, oneSplit.infer)
+  }
+  myExtract <- function(name) {
+    matrix(unlist(lapply(inf.out, "[[", name)), nrow = B, 
+           byrow = TRUE)
+  }
+  pvals <- myExtract("pvals")
+  colnames(pvals) <- colnames(x)
+  if (return.selmodels) {
+    sel.models <- myExtract("sel.models")
+    colnames(sel.models) <- colnames(x)
+  }
+  else {
+    sel.models <- NA
+  }
+  pvals.current <- which.gamma <- numeric(ngroup)
+  for (j in 1:ngroup) {
+    quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE, type = 3) / gamma
+    penalty <- if (length(gamma) > 1) 
+      (1 - log(min(gamma)))
+    else 1
+    pvals.pre <- min(quant.gamma) * penalty
+    pvals.current[j] <- pmin(pvals.pre, 1)
+    which.gamma[j] <- which.min(quant.gamma)
+  }
+  names(pvals.current) <- names(which.gamma) <- colnames(paste(groups))
+  if (!return.nonaggr) 
+    pvals <- NA
+  if (return.selmodels) {
+    keep <- c("return.selmodels", "x", "y", "gamma", "inf.out", 
+              "pvals", "pvals.current", "which.gamma", "sel.models", "FWER")
+    rm(list = setdiff(names(environment()), keep))
+  }
+  structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma],
+                 pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                 method = "multi.carve.group", call = match.call()), class = "carve")
+}
+
+multi.carve.ci.saturated <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B) >= 0.05], FWER = FALSE, ci.level = 0.95,
+                                     family = "gaussian", model.selector = lasso.cvcoef,
+                                     args.model.selector = list(intercept = TRUE, standardize = FALSE),
+                                     se.estimator = "modwise", args.se.estimator = list(df.corr = TRUE, intercept = TRUE, standardize = FALSE),
+                                     args.lasso.inference = list(sigma = NA), ci.timeout = 10, split.pval = TRUE,
+                                     classical.fit = lm.pval, args.classical.fit = NULL, args.classical.ci = NULL,
+                                     parallel = FALSE, ncores = getOption("mc.cores", 2L),
+                                     return.nonaggr = FALSE, return.selmodels = FALSE, verbose = FALSE) {
+  # routine to split the data, select a model, calculate carving p-values B times and determine the corresponding CI
+  # Input
+  # x (matrix): matrix of predictors
+  # y (vector): response vector
+  # B (integer): number of splits
+  # fraction (numeric in (0,1)): fraction used for selection
+  # gamma (numeric or vector of numeric in (0,1]): quantiles to consider, if several, additional penalty is applied
+  # FWER (boolean): shall a FWER correction be applied
+  # ci.level (numeric in (0,1)): level of the confindence interval
+  # family (string): "gaussian" or "binomial"
+  # model.selector (function): how the model is chosen (must be some version of Lasso)
+  # args.model.selector (list): additional arguments for the selection process
+  # se.estimator (string): how sigma is estimated, "1se", "modwise", "min" or "None"
+  # args.se.estimator (list): additional arguments to estimate sigma
+  # args.lasso.inference (list): additional arguments for inference after Lasso
+  # ci.timeout (numeric > 0): maximum time to search for an uncovered point before setting the bound to Inf/ -Inf
+  # split.pval (boolean): shall p-values and confidence intervals for splitting be determined as well
+  # classical.fit (function): function to calculate splitting p-values
+  # args.classical.fit (list): additional arguments for calculating splitting p-values
+  # args.classical.ci (list): additional arguments for calculating splitting CI
+  # parallel (boolean): whether to parallelize the splits (CI calculation is never parallelized)
+  # ncores (integer): number of cores for parallelization
+  # return.nonaggr (boolean): shall raw p-values be returned
+  # return.sel.models (boolean): shall the information, which model was selected be returned
+  # verbose (boolean): whether to print key steps
+  # Output (if split.pval = TRUE,  a list of two output elements is created)
+  # pval.corr (p - vector): multicarving / multisplitting p-values
+  # gamma.min (p - vector): which value of gamma minimized the p-value
+  # ci.level (numeric in (0,1)): level of the confidence interval
+  # lci (p - vector): lower end of confidence interval
+  # uci (p - vector): upper end of confidence interval
+  # optional: pvals.nonaggr (B x p matrix): p-values before aggregation
+  # optional: sel.models (boolean B x p matrix): TRUE if variable was selected in given split
+  # FWER (boolean): was a multiplicity correction applied?
+  # only for carving: vlo (B x p matrix): lower end of constrained region
+  # only for carving: vup (B x p matrix): upper end of constrained region
+  # only for carving: centers (B x p matrix): estimate of parameter in given model
+  # ses (B x p matrix): estimate of standard error of parameter in given model
+  # method ("multi.carve" or "multi.split"): additional output information
+  # call: function call to obtain this carving result
+  
+  if (!(se.estimator %in% c("1se", "min", "modwise", "None")))
+    stop("Sigma estimator must be one of \"1se\", \"min\", \"modwise\" or \"None\" ")
+  
+  if (!(family %in% c("gaussian", "binomial")))
+    stop ("Invalid family provided, can only deal with gaussian and binomial")
+
+  args.model.selector$family <- family
+  args.lasso.inference$family <- family
+  
+  if (is.null(args.lasso.inference$sigma)) args.lasso.inference$sigma <- NA
+  if (family == "gaussian"){
+    if (se.estimator == "None" && is.na(args.lasso.inference$sigma)) stop("Neither SE estimator type nor sigma provided for Gaussian family. This is not ok")
+    if (is.na(args.lasso.inference$sigma)) {
+      if (se.estimator %in% c("1se", "modwise")){
+        use.lambda.min = FALSE
+      } else {
+        use.lambda.min = TRUE
+      }
+      estSigma <- do.call(estimateSigma.flex,
+                          args = c(list(x = x, y = y, use.lambda.min = use.lambda.min), args.se.estimator))
+      globalSigma <- estSigma$sigmahat
+      args.lasso.inference$sigma <- globalSigma
+    } else {
+      # provided sigma has priority over se estimator
+      se.estimator <- "None"
+      globalSigma <- args.lasso.inference$sigma
+    }
+  }
+  
+  n <- nrow(x)
+  p <- ncol(x)
+  n.left <- floor(n * fraction)
+  n.right <- n - n.left
+  stopifnot(n.left >= 1, n.right >= 0)
+  oneSplit <- function(b) {
+    if (verbose) 
+      cat("...split", b, "\n")
+    if (split.pval) {
+      pvals.v <- matrix(1, nrow = 2, ncol = p)
+    } else {
+      pvals.v <- rep(1, p)
+    }
+    sel.models <- logical(p)
+    vlo.v <- rep(-Inf, p)
+    vup.v <- rep(Inf, p)
+    estimates.v <- rep(NA, p)
+    sescarve.v <- rep(Inf, p)
+    lci.v <- rep(-Inf, p)
+    uci.v <- rep(Inf, p)
+    centers.v <- rep(NA, p)
+    ses.v <- rep(Inf, p)
+    df.res <- NA
+    try.again <- TRUE
+    thresh.count <- 0L
+    threshn <- 1e-7
+    continue <- TRUE
+    split.again <- TRUE
+    split.count <- 0
+    while (split.again) {
+      split.again <- FALSE
+      split <- sample.int(n, size = n.left)
+      x.left <- x[split, ]
+      y.left <- y[split]
+      x.right <- x[-split, ]
+      y.right <- y[-split]
+
+      output <- do.call(model.selector, args = c(list(x = x.left, 
+                                                      y = y.left), args.model.selector))
+      sel.model <- output$sel.model
+      beta <- output$beta
+      lambda <- output$lambda
+      
+      fit.again <- TRUE
+      thresh.count <- 0
+      p.sel <- length(sel.model)
+      if (p.sel == 0) fit.again <- FALSE
+      
+      while (fit.again) {
+        fit.again <- FALSE
+        checktry <- tryCatch_W_E(constraint.checker(x.left, y.left, beta, 0, lambda, family,
+                                                    intercept = args.model.selector$intercept), TRUE)
+        if (is.null(checktry$error)) {
+          check <- checktry$value
+        } else {
+          check <- TRUE
+          split.again <- TRUE
+          warning(paste(checktry$error, p.sel, " variables selected with ",
+                        n.left, "data points, splitting again"))
+        }
+        if (!check) {
+          if (verbose) 
+            cat("......fit again...\n")
+          fit.again <- TRUE
+          thresh.count <- thresh.count + 1
+          if (thresh.count > 2) {
+            warning("Giving up reducing threshhold")
+            break()
+          }
+          threshn <- 1e-7 / (100) ^ thresh.count
+          fit <- glmnet(x = x.left,y = y.left,standardize = args.model.selector$standardize,
+                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
+          if (verbose) cat(threshn,"\n")
+          coefs <- coef(fit, x = x.left, y = y.left, s = lambda / n.left, exact = TRUE,
+                        standardize = args.model.selector$standardize,
+                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
+          beta <- coefs[-1]
+          sel.model <- which(abs(beta) > 0)
+          
+          if (family == "binomial") beta <- coefs
+          p.sel <- length(sel.model)
+          if (p.sel == 0) fit.again <- FALSE
+          warning(paste("reducing threshold", thresh.count, "to", threshn, sep = " "))
+        }
+      }
+      
+      p.sel <- length(sel.model)
+      # use new split in case of singularity. This is mostly an issue for discrete x.
+      if (args.model.selector$intercept) {
+        if ((p.sel > 0 && (rankMatrix(cbind(rep(1, n.left), x.left[, sel.model]))[[1]]< (p.sel + 1) ||
+                           (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[, sel.model]))[[1]] < (p.sel + 1)))) ||
+            fit.again) split.again <- TRUE
+      } else {
+        if ((p.sel > 1 && (rankMatrix(x.left[, sel.model])[[1]] < (p.sel) ||
+                           (p.sel < n.right  && rankMatrix(x.right[, sel.model])[[1]]< (p.sel)))) ||
+            fit.again) split.again <- TRUE
+      }
+      if (split.again) {
+        reason <- character(0)
+        if (args.model.selector$intercept){
+          if (rankMatrix(cbind(rep(1, n.left), x.left[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x2 rank")
+        } else {
+          if (rankMatrix( x.left[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x1 rank")
+          if (p.sel < n.right && rankMatrix(x.right[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x2 rank")
+        }
+        
+        if (fit.again) reason <- c(reason, "fit")
+        if (!is.null(checktry$error)) reason <- c(reason, "error while checking")
+        split.count <- split.count + 1
+        if (split.count > 4) {
+          stop(paste("More than 5 splits needed, final reason:", reason))
+        }
+        if (verbose) 
+          cat("......Splitting again...\n")
+        warning(paste("Splitting again ", split.count, "reason", reason))
+      }
+    }
+
+    if (se.estimator == "modwise" && family == "gaussian") {
+      if (length(beta) == p + 1) beta <- beta[-1]
+      if (args.model.selector$intercept){
+        RSS <- sum((scale(y, T, F) - scale(x, T, F) %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel - 1
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      } else {
+        RSS <- sum((y- x %*% beta) ^ 2)
+        if (args.se.estimator$df.corr) {
+          den <- n - p.sel
+        } else {
+          den <- n
+        }
+        sigma.model <- sqrt(RSS / den)
+      }
+      estSigma <- sigma.model
+      args.lasso.inference$sigma <- sigma.model
+    }
+      
+    if (p.sel > 0) {
+      fLItry <- tryCatch_W_E(do.call(carve.lasso,
+                                     args = c(list(X = x, y = y,ind = split, beta = beta, tol.beta = 0,
+                                                   lambda = lambda, intercept = args.model.selector$intercept,
+                                                   selected = FALSE), args.lasso.inference)), 0)
+      if (!is.null(fLItry$error)) {
+        warning(paste("Failed to infer a split, due to:", fLItry$error, sep=" "))
+        pvals.v[] = NA
+        list(pvals = pvals.v, sel.models = sel.models, centers = centers.v, 
+             ses = ses.v, df.res = df.res, lci = lci.v, uci = uci.v, sescarve = sescarve.v,
+             vlo = vlo.v, vup = vup.v, estimates= estimates.v, split = split)
+      } else if (!is.null(fLItry$warning)) {
+        for (war in unique(fLItry$warning)) {
+          warning(paste("Split", b, ":", war, sep = " "))
+        }
+      }
+      fLI <- fLItry$value
+      sel.pval1 <- fLI$pv
+      sel.vlo <- fLI$vlo
+      sel.vup <- fLI$vup
+      sel.sescarve <- fLI$ses
+      sel.estimates <- fLI$estimates
+      
+      if (any(is.na(sel.pval1))) {
+        stop("The carve procedure returned a p-value NA")
+      } 
+      
+      if (length(sel.pval1) != p.sel) { 
+        stop(paste("The carve procedure didn't return the correct number of p-values for the provided submodel.",
+                   p.sel, length(sel.pval1)))
+      }
+      if (!all(sel.pval1 >= 0 & sel.pval1 <= 1)) {
+        stop("The carve procedure returned values below 0 or above 1 as p-values")
+      }
+      sel.pval1 <- 2 * pmin(sel.pval1, 1 - sel.pval1)
+      if (FWER) {
+        sel.pval1 <- pmin(sel.pval1 * p.sel, 1) # for FWER
+      } else {
+        sel.pval1 <- pmin(sel.pval1, 1) # for FCR
+      }
+      if (split.pval) {
+        x.right <- x[-split, ]
+        y.right <- y[-split]
+        if (args.model.selector$intercept) {
+          bound <- n.right-1
+        } else {
+          bound <- n.right
+        }
+        if (p.sel < bound) {
+          sel.pval2try <- tryCatch_W_E(do.call(classical.fit, 
+                                               args = c(list(x = x.right[, sel.model], y = y.right), args.classical.fit)),
+                                       rep(NA, p.sel))
+          sel.pval2 <- sel.pval2try$value
+          if (!is.null(sel.pval2try$error)) {
+            warning(paste(sel.pval2try$error, "while caluclatng split p-values", sep=" "))
+          }
+          NAs <- FALSE
+          if (any(is.na(sel.pval2))) NAs <- TRUE
+          # do not stop if splitting leads to NA
+          if (length(sel.pval2) != p.sel) 
+            stop("The classical.fit function didn't return the correct number of p-values for the provided submodel.")
+          if (!all(sel.pval2 >= 0 & sel.pval2 <= 1) && !NAs) 
+            stop("The classical.fit function returned values below 0 or above 1 as p-values")
+          if (FWER) {
+            sel.pval2 <- pmin(sel.pval2 * p.sel, 1) # for FWER
+          } else {
+            sel.pval2 <- pmin(sel.pval2, 1) # for FCR
+          }
+          tmp.fit.lm <- lm(y.right ~ x.right[, sel.model], 
+                           args.classical.fit)
+          a <- (1 - ci.level)/2
+          a <- c(a, 1 - a)
+          fac <- qt(a, tmp.fit.lm$df.residual)
+          sel.ses <- sqrt(diag(vcov(tmp.fit.lm)))[-1]
+          sel.centers <- coef(tmp.fit.lm)[-1]
+          sel.ci <- sel.centers + sel.ses %o% fac
+          centers.v[sel.model] <- sel.centers
+          lci.v[sel.model] <- sel.ci[, 1]
+          uci.v[sel.model] <- sel.ci[, 2]
+          ses.v[sel.model] <- sel.ses
+          df.res <- tmp.fit.lm$df.residual
+          pvals.v[1, sel.model] <- sel.pval1
+          pvals.v[2, sel.model] <- sel.pval2
+          vlo.v[sel.model] <- sel.vlo
+          vup.v[sel.model] <- sel.vup
+          estimates.v[sel.model] <- sel.estimates
+          sescarve.v[sel.model] <- sel.sescarve
+        } else {
+          pvals.v[1, sel.model] <- sel.pval1
+          vlo.v[sel.model] <- sel.vlo
+          vup.v[sel.model] <- sel.vup
+          estimates.v[sel.model] <- sel.estimates
+          sescarve.v[sel.model] <- sel.sescarve
+        }
+      } else {
+        pvals.v[sel.model] <- sel.pval1
+        vlo.v[sel.model] <- sel.vlo
+        vup.v[sel.model] <- sel.vup
+        estimates.v[sel.model] <- sel.estimates
+        sescarve.v[sel.model] <- sel.sescarve
+      }
+          
+      if (return.selmodels) 
+        sel.models[sel.model] <- TRUE
+    }
+    
+    if (p.sel == 0) {
+      if (verbose) 
+        cat("......Empty model selected. That's ok...\n")
+    }
+    list(pvals = pvals.v, sel.models = sel.models, centers = centers.v, 
+         ses = ses.v, df.res = df.res, lci = lci.v, uci = uci.v, sescarve = sescarve.v,
+         vlo = vlo.v, vup = vup.v, estimates= estimates.v, split = split)
+  }
+  split.out <- if (parallel) {
+    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
+    if (verbose) 
+      cat("...starting parallelization of sample-splits for selection and constraints\n")
+    mclapply(1:B, oneSplit, mc.cores = ncores)
+  } else {
+    if (verbose)
+      cat("...selecting models and determing constraints\n")
+    lapply(1:B, oneSplit)
+  }
+  myExtract <- function(name) {
+    matrix(unlist(lapply(split.out, "[[", name)), nrow = B, 
+           byrow = TRUE)
+  }
+  if (verbose) 
+    cat("...determing confidence intervals\n")
+  if (split.pval) { 
+    ls <- list()
+    pvalsall <- array(unlist(lapply(split.out, "[[", "pvals")), dim = c(2, p, B))
+    for (icf in  1:2) {
+      pvals <- t(pvalsall[icf, , ])
+      colnames(pvals) <- colnames(x)
+      if (return.selmodels) {
+        sel.models <- myExtract("sel.models")
+        colnames(sel.models) <- colnames(x)
+      } else {
+        sel.models <- NA
+      }
+      if (icf == 1) {
+        vlo <- myExtract("vlo")
+        vars <- ncol(vlo)
+        vup <- myExtract("vup")
+        sescarve <- myExtract("sescarve")
+        estimates <- myExtract("estimates")
+      } else {
+        lci <- myExtract("lci")
+        uci <- myExtract("uci")
+        centers <- myExtract("centers")
+        ses <- myExtract("ses")
+      }
+      
+      df.res <- unlist(lapply(split.out, `[[`, "df.res"))
+      pvals.current <- which.gamma <- numeric(p)
+      for (j in 1:p) {
+        if (any(!is.na(pvals[, j]))) {
+          quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE, type = 3) / gamma
+          penalty <- if (length(gamma) > 1)
+            (1 - log(min(gamma)))
+          else 1
+          pvals.pre <- min(quant.gamma) * penalty
+          pvals.current[j] <- pmin(pvals.pre, 1)
+          which.gamma[j] <- which.min(quant.gamma)
+        } else {
+          pvals.current[j] <- NA
+          which.gamma[j] <- NA
+        }
+      }
+      names(pvals.current) <- names(which.gamma) <- colnames(x)
+      s0 <- if (any(is.na(sel.models)))
+        NA
+      else apply(sel.models, 1, sum)
+      if (icf == 1) {
+        new.ci <- mapply(aggregate.ci.saturated, vlo = split(vlo, rep(1:vars, each = B)),
+                         vup = split(vup, rep(1:vars, each = B)), 
+                         centers = split(estimates, rep(1:vars, each = B)), 
+                         ses = split(sescarve, rep(1:ncol(sescarve), each = B)), 
+                         gamma.min = min(gamma), multi.corr = FWER, verbose = FALSE, timeout = ci.timeout,
+                         s0 = list(s0 = s0), ci.level = ci.level, var = 1:vars)
+      } else {
+        new.ci <- mapply(hdi:::aggregate.ci, lci = split(lci, rep(1:vars, each = B)),
+                         rci = split(uci, rep(1:vars, each = B)),
+                         centers = split(centers, rep(1:vars, each = B)),
+                         ses = split(ses, rep(1:ncol(ses), each = B)), df.res = list(df.res = df.res),
+                         gamma.min = min(gamma), multi.corr = FALSE, verbose = FALSE,
+                         s0 = list(s0 = s0), ci.level = ci.level, var = 1:vars)
+      }
+      lci.current <- t(new.ci)[, 1]
+      uci.current <- t(new.ci)[, 2]
+      names(lci.current) <- names(uci.current) <- names(pvals.current)
+      
+      if (!return.nonaggr)
+        pvals <- NA
+      if (return.selmodels) {
+        if (icf == 2) {
+          keep <- c("return.selmodels", "x", "y", "gamma", "split.out",
+                    "pvals", "pvals.current", "which.gamma", "sel.models",
+                    "ls", "icf", "ci.level", "estimates", "FWER",
+                    "lci.current", "uci.current", "vlo", "vup", "sescarve", "ses")
+          rm(list = setdiff(names(environment()), keep))
+        }
+      }
+      if (icf == 1) {
+        ls[[icf]] <- structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma], 
+                                    ci.level = ci.level, lci = lci.current, uci = uci.current,
+                                    pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                                    vlo = vlo, vup = vup, centers = estimates, ses = sescarve,
+                                    method = "multi.carve", call = match.call()), class = "carve")
+      } else {
+        ls[[icf]] <- structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma],
+                                    ci.level = ci.level, lci =  lci.current, uci = uci.current,
+                                    pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                                    ses = ses, method = "multi.split", call = match.call()), class = "carve")
+      }
+    }
+    return(ls)
+  } else {
+    pvals <- myExtract("pvals")
+    colnames(pvals) <- colnames(x)
+    if (return.selmodels) {
+      sel.models <- myExtract("sel.models")
+      colnames(sel.models) <- colnames(x)
+    } else {
+      sel.models <- NA
+    }
+    vlo <- myExtract("vlo")
+    vup <- myExtract("vup")
+    estimates <- myExtract("estimates")
+    sescarve <- myExtract("sescarve")
+    pvals.current <- which.gamma <- numeric(p)
+    for (j in 1:p) {
+      quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE,type = 3) / gamma
+      penalty <- if (length(gamma) > 1) 
+        (1 - log(min(gamma)))
+      else 1
+      pvals.pre <- min(quant.gamma) * penalty
+      pvals.current[j] <- pmin(pvals.pre, 1)
+      which.gamma[j] <- which.min(quant.gamma)
+    }
+    names(pvals.current) <- names(which.gamma) <- colnames(x)
+    vars <- ncol(vlo)
+    s0 <- if (any(is.na(sel.models))) 
+      NA
+    else apply(sel.models, 1, sum)
+    new.ci <- mapply(aggregate.ci.saturated, vlo = split(vlo, rep(1:vars, each = B)),
+                     vup = split(vup, rep(1:vars, each = B)), 
+                     centers = split(estimates, rep(1:vars, each = B)), 
+                     ses = split(sescarve, rep(1:ncol(sescarve), each = B)), 
+                     gamma.min = min(gamma), multi.corr = FALSE, verbose = FALSE, timeout = ci.timeout,
+                     s0 = list(s0 = s0), ci.level = ci.level, var = 1:vars)
+    lci.current <- t(new.ci)[, 1]
+    uci.current <- t(new.ci)[, 2]
+    if (!return.nonaggr) 
+      pvals <- NA
+    names(lci.current) <- names(uci.current) <- names(pvals.current)
+    if (return.selmodels) {
+      keep <- c("return.selmodels", "x", "y", "gamma", "split.out", "FWER",
+                "pvals", "pvals.current", "which.gamma", "sel.models", "ci.level", 
+                "lci.current", "uci.current", "vlo", "vup", "sescarve", "estimates")
+      rm(list = setdiff(names(environment()), keep))
+    }
+    structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma], 
+                   ci.level = ci.level, lci = lci.current, uci = uci.current,
+                   pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
+                   vlo = vlo, vup = vup, centers = estimates, ses = sescarve,
+                   method = "multi.carve", call = match.call()), class = "carve")
+  }
+}
+
+pval.aggregator <- function(pval.list, gamma, cutoff = TRUE) {
+  aggregated.list <- list()
+  i <- 0
+  for (pvals in pval.list) {
+    i <- i+1
+    p <- dim(pvals)[2]
+    pvals.current <- numeric(p)
+    for (j in 1:p) {
+      quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE, type = 3) / gamma
+      penalty <- if (length(gamma) > 1) 
+        (1 - log(min(gamma)))
+      else 1
+      pvals.pre <- min(quant.gamma) * penalty
+      if (cutoff) pvals.pre <- pmin(pvals.pre, 1)
+      pvals.current[j] <- pvals.pre
+    }
+    aggregated.list[[i]] <- pvals.current
+  }
+  return(aggregated.list)
+}
+
+# different Lasso selector
+
+lasso.firstqcoef <- function (x, y, q, tol.beta = 0, return.intercept = NULL, ...) {
+  fit <- glmnet(x, y, dfmax = q,...)
+  m <- predict(fit, type = "nonzero")
+  delta <- q - unlist(lapply(m, length))
+  delta[delta < 0] <- Inf
+  take <- which.min(delta)
+  sel.model <- m[[take]]
+  lambda <- fit$lambda[take]
+  coefs <- coef(fit, s = lambda)
+  beta <- coefs[2 : (dim(x)[2] + 1)]
+  if (is.null(return.intercept)) return.intercept <- (abs(coefs[1]) > 0)
+  if (return.intercept) {
+    return.beta <- coefs[1 : (dim(x)[2] + 1)]
+  } else {
+    return.beta <- beta
+  }
+  if (coefs[1] != 0) {
+    if (is.character(as.list(match.call())$family) && as.list(match.call())$family == "binomial"){
+      chosen <- which(abs(beta) > tol.beta / sqrt(colSums(x ^ 2))) # model indices
+    } else {
+      chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(scale(x, T, F) ^ 2 ))) # model indices
+    }
+  } else {
+    chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(x ^ 2))) # model indices
+  }
+  return(list(sel.model = chosen, beta = return.beta, lambda = lambda * dim(x)[1]))
+}
+
+lasso.cvcoef<-function (x, y, nfolds = 10, grouped = nrow(x) > 3 * nfolds,
+                        tol.beta = 0, use.lambda.min = FALSE, return.intercept = NULL, ...) {
+  fit.cv <- cv.glmnet(x, y, nfolds = nfolds, grouped = grouped, thresh = 1e-7, ...)
+  if (use.lambda.min) {
+    lambda <- fit.cv$lambda.min
+  } else {
+    lambda <- fit.cv$lambda.1se
+  }
+  coefs <- coef(fit.cv,x=x,y=y,s=lambda,exact=TRUE)
+  beta <- coefs[2:(dim(x)[2]+1)]
+  if (is.null(return.intercept)) return.intercept <- (abs(coefs[1])>0)
+  if (return.intercept) {
+    return.beta <- coefs[1 : (dim(x)[2] + 1)]
+  } else {
+    return.beta <- beta
+  }
+  if (coefs[1] != 0) {
+    if (is.character(as.list(match.call())$family) && as.list(match.call())$family == "binomial"){
+      chosen <- which(abs(beta) > tol.beta / sqrt(colSums(x ^ 2))) # model indices
+    } else {
+      chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(scale(x, T, F) ^ 2 ))) # model indices
+    }
+  } else {
+    chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(x ^ 2))) # model indices
+  }
+  return(list(sel.model = chosen,beta = return.beta,lambda = lambda * dim(x)[1]))
+}
+
+fixedLasso.modelselector <-function(x, y, lambda, tol.beta, thresh = 1e-7, exact = FALSE, ...) {
+  fit<-glmnet(x, y, alpha = 1, thresh = thresh,...)
+  if (exact) {
+    coefs <-coef(fit, s = lambda / (dim(x)[1]),x = x,
+                 y = y, exact = exact, thresh = thresh) # lambda/n1 due to different definition of the LASSO loss function 
+  } else {
+    coefs <- coef(fit, s = lambda / (dim(x)[1])) # lambda/n1 due to different definition of the LASSO loss function
+  }
+  
+  beta <- coefs[2 : (dim(x)[2] + 1)]
+  if (coefs[1] != 0) {
+    if (is.character(as.list(match.call())$family) && as.list(match.call())$family == "binomial"){
+      chosen <- which(abs(beta) > tol.beta / sqrt(colSums(x ^ 2))) # model indices
+    } else {
+      chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(scale(x, T, F) ^ 2 ))) # model indices
+    }
+  } else {
+    chosen <- which(abs(beta) > tol.beta * sqrt(nrow(x) / colSums(x ^ 2))) # model indices
+  }
+  return(list(sel.model = chosen, beta = beta, lambda = lambda))
+}
+
+estimateSigma.flex <- function (x, y, intercept = TRUE, standardize = FALSE, use.lambda.min = FALSE, df.corr = FALSE) {
+  selectiveInference:::checkargs.xy(x, rep(0, nrow(x)))
+  if (nrow(x) < 10) 
+    stop("Number of observations must be at least 10 to run estimateSigma")
+  cvfit <- cv.glmnet(x, y, intercept = intercept, standardize = standardize)
+  lamhat <- cvfit$lambda.1se
+  if (use.lambda.min) lamhat <- cvfit$lambda.min
+  fit <- glmnet(x, y, intercept = intercept, standardize = standardize)
+  yhat <- predict(fit, x, s = lamhat)
+  nz <- sum(predict(fit, s = lamhat, type = "coef") != 
+             0)
+  den <- length(y)
+  if (df.corr) {
+    den <- den - nz
+  }
+
+  sigma = sqrt(sum((y - yhat) ^ 2) / den)
+  return(list(sigmahat = sigma, df = nz))
+}
+
+lm.pval.flex <- function (x, y, exact = TRUE, intercept = TRUE, Sigma = NA, t.test = TRUE, ...) {
+  if (intercept) {
+    fit.lm <- lm(y ~ x, ...)
+    fit.summary <- summary(fit.lm)
+    tstat <- coef(fit.summary)[-1, "t value"]
+  } else {
+    fit.lm <- lm(y ~ -1 + x,...) 
+    fit.summary <- summary(fit.lm)
+    tstat <- coef(fit.summary)[, "t value"]
+  }
+  
+  if (is.na(Sigma) || t.test) {
+    setNames(2 * (if (exact) 
+      pt(abs(tstat), df = fit.lm$df.residual, lower.tail = FALSE)
+      else pnorm(abs(tstat), lower.tail = FALSE)), colnames(x)) 
+  } else {
+    sigma.hat <- sqrt(sum((fit.lm$residuals) ^ 2) / fit.lm$df.residual)
+    setNames(2 * pnorm(abs(tstat * sigma.hat / Sigma), lower.tail = FALSE), colnames(x))
+  }
+}
+
+glm.pval.pseudo <- function(x, y, maxit = 100, delta.start = 0.01, epsilon = 1e-06) {
+  increase <- TRUE
+  incs <- 0
+  delta <- 0
+  while (increase) {
+    increase <- FALSE
+    pi.hat <- max(delta, min(1 - delta, mean(y)))
+    delta.0 <- (pi.hat * delta)/(1 + delta)
+    delta.1 <- (1 + pi.hat * delta)/(1 + delta)
+    y.tilde <- delta.0 * (1 - y) + delta.1 * y
+    pseudo.y <- cbind(y.tilde, 1 - y.tilde)
+    tryfit <- tryCatch_W_E(glm.pval(x = x, y = pseudo.y, family = "binomial", maxit = maxit, epsilon = epsilon), 0)
+    if ("glm.fit: fitted probabilities numerically 0 or 1 occurred" %in% tryfit$warning) {
+      if (incs == 0){
+        delta <- delta.start
+      } else {
+        delta <- 1.1 * delta
+      }
+      incs <- incs + 1
+      increase <- TRUE
+      if (delta > 10 * delta.start) break("Increased delta too much without success")
+    } else {
+      pvals <- tryfit$value
+    }
+  }
+  if (incs > 0) warning(paste("Increased delta to ", delta))
+  return(pvals)
+}
+
+
+
+aggregate.ci.saturated <- function(vlo, vup, centers, ses, gamma.min, multi.corr = FALSE,
+                                   verbose = FALSE, var, s0, ci.level, timeout = 10) {
+  inf.ci <- is.infinite(vlo) & is.infinite(vup)
+  no.inf.ci <- sum(inf.ci)
+  B <- length(vlo)
+  if (verbose) {
+    cat("number of Inf ci:", no.inf.ci, "\n")
+  }
+  if ((no.inf.ci == B) || (no.inf.ci > (1 - gamma.min) * 
+                                     B)) {
+    # variable not select frequently enough
+    return(c(-Inf, Inf))
+  }
+  vlo <- vlo[!inf.ci]
+  vup <- vup[!inf.ci]
+  centers <- centers[!inf.ci]
+  ses <- ses[!inf.ci]
+  s0 <- s0[!inf.ci]
+  ci.info <- list(vlo = vlo, vup = vup, centers = centers, 
+                  no.inf.ci = no.inf.ci, ses = ses, 
+                  s0 = s0,  gamma.min = gamma.min, multi.corr = multi.corr, 
+                  ci.level = ci.level)
+  # find a starting point within the interval
+  inner <- find.inside.point.gammamin.saturated(low = min(centers), high = max(centers), 
+                                      ci.info = ci.info, verbose = verbose)
+
+  outer <- min(vlo[is.finite(vlo)])
+  newboundstry <- tryCatch_W_E(find.bisection.bounds.gammamin.saturated(shouldcover = inner, shouldnotcover = outer,
+                                                                        ci.info = ci.info, verbose = verbose, timeout = timeout), NA)
+  if (!is.null(newboundstry$error)) {
+    warning(paste(newboundstry$error, " setting lower interval limit to -Inf for variable ", var))
+    l.bound  <- -Inf
+  } else {
+    new.bounds <- newboundstry$value
+    inner <- new.bounds$shouldcover
+    outer <- new.bounds$shouldnotcover
+    
+    l.bound <- bisection.gammamin.coverage.saturated(outer = outer, inner = inner, 
+                                                     ci.info = ci.info, verbose = verbose)
+  }
+
+  if (verbose) {
+    cat("lower bound ci aggregated is", l.bound, "\n")
+  }
+  outer <- max(vup[is.finite(vup)])
+  newboundstry <- tryCatch_W_E(find.bisection.bounds.gammamin.saturated(shouldcover = inner, shouldnotcover = outer, 
+                                                                        ci.info = ci.info, verbose = verbose, timeout=timeout), NA)
+  if (!is.null(newboundstry$error)) {
+    warning(paste(newboundstry$error, " setting upper interval limit to Inf for variable ", var))
+    u.bound  <- Inf
+  } else {
+    new.bounds <- newboundstry$value
+    inner <- new.bounds$shouldcover
+    outer <- new.bounds$shouldnotcover
+    u.bound <- bisection.gammamin.coverage.saturated(inner = inner, outer = outer, 
+                                                     ci.info = ci.info, verbose = verbose)
+  }
+
+  if (verbose) {
+    cat("upper bound ci aggregated is", u.bound, "\n")
+  }
+  return(c(l.bound, u.bound))
+}
+
+find.inside.point.gammamin.saturated <- function (low, high, ci.info, verbose) {
+  range.length <- 10
+  test.range <- seq(low, high, length.out = range.length)
+  cover <- mapply(does.it.cover.gammamin.saturated, beta.j = test.range, 
+                  ci.info = list(ci.info = ci.info))
+  while (!any(cover)) {
+    range.length <- 10 * range.length
+    test.range <- seq(low, high, length.out = range.length)
+    cover <- mapply(does.it.cover.gammamin.saturated, beta.j = test.range, 
+                    ci.info = list(ci.info = ci.info))
+    if (range.length > 10^3) {
+      message("FOUND NO INSIDE POINT")
+      message("number of splits")
+      message(length(ci.info$centers))
+      message("centers")
+      message(ci.info$centers)
+      message("ses")
+      message(ci.info$ses)
+      stop("couldn't find an inside point between low and high. The confidence interval doesn't exist!")
+    }
+  }
+  if (verbose) {
+    cat("Found an inside point at granularity of", 
+        range.length, "\n")
+  }
+  min(test.range[cover])
+}
+
+does.it.cover.gammamin.saturated <- function (beta.j, ci.info) {
+  # is beta.j within the interval
+  # i.e. is th two-sided pvalue of beta \geq 1 - ci.level
+  if (missing(ci.info)) 
+    stop("ci.info is missing to the function does.it.cover.gammamin")
+  centers <- ci.info$centers
+  npv <- length(centers)
+  no.inf.ci <- ci.info$no.inf.ci
+  ses <- ci.info$ses
+  vlo <- ci.info$vlo
+  vup <- ci.info$vup
+  gamma.min <- ci.info$gamma.min
+  multi.corr <- ci.info$multi.corr
+  s0 <- ci.info$s0
+  alpha <- 1 - ci.info$ci.level
+  pvals <- numeric(npv)
+  for (i in 1:npv) {
+    # calculate the per-split p-values, this can be numerically tricky!
+    pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta.j, ses[i], vlo[i], vup[i])
+    if (pvals[i] == 0 || pvals[i] == 1 || is.na(pvals[i])) {
+      pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta.j, ses[i], vlo[i], vup[i], bits = 2)
+      if (is.na(pvals[i])) pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta.j, ses[i], vlo[i], vup[i], bits = 100)
+    } 
+  }
+  if (any(is.na(pvals))) stop("At least one p-value is NA")
+  pvals <- pmin(pvals, 1 - pvals)
+  if (multi.corr) pvals <- pvals * s0
+  pval.rank <- rank(pvals, ties.method = "first")
+  nsplit <- length(pval.rank) + no.inf.ci
+  gamma.b <- pval.rank / nsplit
+
+  alpha.b <- (alpha * gamma.b / (1 - log(gamma.min)))
+  if (all(gamma.b < gamma.min)) {
+    # we should not get to this point, since the number of infinite CI's is checked
+    return(TRUE)
+  } else {
+    coveredpre <- all(alpha.b[gamma.b >= gamma.min] < 2 * pvals[gamma.b >= gamma.min])
+    return(coveredpre)
+  }
+}
+
+find.bisection.bounds.gammamin.saturated <- function (shouldcover, shouldnotcover, ci.info, verbose, timeout = 10) {
+  # find a point that is definitely outside the interval
+  reset.shouldnotcover <- FALSE
+  if (does.it.cover.gammamin.saturated(beta.j = shouldnotcover, ci.info = ci.info)) {
+    reset.shouldnotcover <- TRUE
+    if (verbose) 
+      cat("finding a new shouldnotcover bound\n")
+    start.user.time <- proc.time()[["elapsed"]]
+    i <- 0
+    while (does.it.cover.gammamin.saturated(beta.j = shouldnotcover, 
+                                            ci.info = ci.info)) {
+      i <- i + 1
+      old <- shouldnotcover
+      shouldnotcover <- shouldnotcover + i * (shouldnotcover - shouldcover)
+      shouldcover <- old
+      if ((proc.time()[["elapsed"]] - start.user.time) > timeout) 
+        stop(paste("Searched outside point for more than ", timeout, " seconds, reached ", shouldnotcover))
+    }
+    if (verbose) {
+      cat("new\n")
+      cat("shouldnotcover", shouldnotcover, "\n")
+      cat("shouldcover", shouldcover, "\n")
+    }
+  }
+  if (!does.it.cover.gammamin.saturated(beta.j = shouldcover, ci.info = ci.info)) {
+    if (reset.shouldnotcover) 
+      stop("Problem: we first reset shouldnotcover and are now resetting shouldcover, this is not supposed to happen")
+    if (verbose) 
+      cat("finding a new shouldcover bound\n")
+    while (!does.it.cover.gammamin.saturated(beta.j = shouldcover, 
+                                   ci.info = ci.info)) {
+      old <- shouldcover
+      shouldcover <- shouldcover + (shouldcover - shouldnotcover)
+      shouldnotcover <- old
+    }
+    if (verbose) {
+      cat("new\n")
+      cat("shouldnotcover", shouldnotcover, "\n")
+      cat("shouldcover", shouldcover, "\n")
+    }
+  }
+  return(list(shouldcover = shouldcover, shouldnotcover = shouldnotcover))
+}
+
+bisection.gammamin.coverage.saturated <- function (outer, inner, ci.info, verbose, eps.bound = 10 ^ (-7)) {
+  # find parameter with a p-value of exactly 1-ci.level with a precision of eps.bound (precision of the parameter)
+  check.bisection.bounds.gammamin.saturated(shouldcover = inner, shouldnotcover = outer, 
+                                  ci.info = ci.info, verbose = verbose)
+  eps <- 1
+  while (eps > eps.bound) {
+    middle <- (outer + inner)/2
+    if (does.it.cover.gammamin.saturated(beta.j = middle, ci.info = ci.info)) {
+      inner <- middle
+    } else {
+      outer <- middle
+    }
+    eps <- abs(inner - outer)
+  }
+  solution <- (inner + outer)/2
+  if (verbose) {
+    cat("finished bisection...eps is", eps, "\n")
+  }
+  return(solution)
+}
+
+check.bisection.bounds.gammamin.saturated <- function (shouldcover, shouldnotcover, ci.info, verbose) {
+  # this function should not fail
+  if (does.it.cover.gammamin.saturated(beta.j = shouldnotcover, ci.info = ci.info)) {
+    stop("shouldnotcover bound is covered! we need to decrease it even more! (PLZ implement)")
+  } else {
+    if (verbose) 
+      cat("shouldnotcover bound is not covered, this is good")
+  }
+  if (does.it.cover.gammamin.saturated(beta.j = shouldcover, ci.info = ci.info)) {
+    if (verbose) 
+      cat("shouldcover is covered!, It is a good covered bound")
+  } else {
+    stop("shouldcover is a bad covered bound, it is not covered!")
+  }
+}
+
+
+pval.creator <- function(beta, gamma, vlo, vup, centers, ses, s0 = NA, multi.corr = FALSE) {
+  B <- length(centers)
+  test <- is.finite(vlo)
+  npv <- sum(test)
+  vlo <- vlo[test]
+  vup <- vup[test]
+  ses <- ses[test]
+  centers <- centers[test]
+  no.inf.ci <- B - npv
+  gamma.min <- min(gamma)
+  pvals <- numeric(npv)
+  for (i in 1:npv) {
+    pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta, ses[i], vlo[i], vup[i])
+    if (pvals[i] == 0 || pvals[i] == 1 || is.na(pvals[i])) {
+      pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta, ses[i], vlo[i], vup[i], bits = 2)
+      if (is.na(pvals[i])) pvals[i] <- selectiveInference:::tnorm.surv(centers[i], beta, ses[i], vlo[i], vup[i], bits = 100)
+    } 
+  }
+  pvals <- 2 * pmin(pvals, 1 - pvals)
+  pvals <- c(pvals, rep(1, no.inf.ci))
+  if (multi.corr) {
+    if (any(is.na(s0))) 
+      stop("need s0 information to be able to create multiple testing corrected pvalues")
+    s0 <- s0[test]
+    pvals[1:npv] <- pvals[1:npv] * s0
+  }
+  pval <- pval.aggregator(list(as.matrix(pvals, ncol = 1)), gamma)
+  return(pval)
+}
+
+print.carve <- function(x){
+  if (is.list(x)) {
+    if (isTRUE(x$method == "multi.carve" || x$method == "multi.carve.group")) {
+      cat("Result from multicarving \n")
+    } else if (isTRUE(x$method == "multi.split")){
+      cat("Result from multisplitting \n")
+    } else if (isTRUE(x$method == "carve100")){
+      cat("Result from carve 100 \n")
+    } else {
+      return (print.default(x))
+    }
+    if (x$method == "multi.carve.group"){
+      cat("alpha = 0.01:")
+      cat(" Selected predictor groups:", which(x$pval.corr <= 0.01), 
+          "\n")
+      cat("alpha = 0.05:")
+      cat(" Selected predictor groups:", which(x$pval.corr <= 0.05), 
+          "\n")
+    } else {
+      cat("alpha = 0.01:")
+      cat(" Selected predictors:", which(x$pval.corr <= 0.01), 
+          "\n")
+      cat("alpha = 0.05:")
+      cat(" Selected predictors:", which(x$pval.corr <= 0.05), 
+          "\n")
+    }
+
+    cat("------\n")
+    if (isTRUE(x$FWER)){
+      cat("Familywise error rate controlled at level alpha.\n")
+    } else if (isFALSE(x$FWER)){
+      if (x$method == "multi.carve.group"){
+        cat("Single group error rate controlled at level alpha.\n")
+      } else {
+        cat("Single variable error rate controlled at level alpha.\n")
+      }
+      cat("No multiplicity correction applied.\n")
+    }
+   
+  } else {
+    print.default(x)
+  }
+}

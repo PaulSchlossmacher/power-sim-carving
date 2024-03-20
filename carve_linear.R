@@ -82,9 +82,31 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   ind.vup <- (A %*% c > 0)
   ind.vlo <- (A %*% c < 0)
   
-  
   vup <- max((b-A %*% z)/(A %*% c)[ind.vup])
   vlo <- max((b-A %*% z)/(A %*% c)[ind.vlo])
   
   
+  #I'm not sure about this yet, but at least in the analogy to OLS I think it makes sense:
+  #There we also build confidence intervals etc. based on beta^hat.
+  beta.M=beta_carve_D
+  
+  #y~N(x beta^0, tau^2 I_n)
+  tau.M=sigma
+  #We assume - to start off with - that tau^2=tau_M^2. Drysdale does mention on p. 3 that 
+  #it could happen that sigma_M^2>sigma^2 due to some covariates being left out
+  
+
+  #In the Drysdale paper, sigma_1 gets defined via the entry jj for all j. Therefore we take the diagonal
+  #of the matrix and work with that
+  #Since it's a diagonal matrix, we can just apply the inverse at the end, which is
+  #computationally easier
+  sigma.1=(tau.M/n^2)*((n.b^2*diag((t(x.Mb)%*%x.Mb))^-1)+(n.a^2*diag((t(x.Ma)%*%x.Ma))^-1))
+  sigma.2=tau.M*diag((t(x.Ma)%*%x.Ma))^-1
+  w=(vlo-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
+  delta=(vup-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
+  
+  #I'm assuming that we need the jj-th entry again here everywhere. Otherwise division 
+  #wouldn't make sense and we'd need to build some sort of framework for allowing the sqrt
+  rho=sqrt(n*n.a)*(diag(t(x.Ma)%*%x.Ma))^(-1/2)/
+    sqrt(n.b^2*diag((t(x.Mb)%*%x.Mb))^-1 + n.a^2*diag((t(x.Ma)%*%x.Ma))^-1)
 }

@@ -68,9 +68,9 @@ y <- y.true + sigma * rnorm(n)
 
 pvals.v <- rep(1,p)
 sel.models <- logical(p)#logical vector initialized with False, this will indicate which predictors are chosen in the model
-
+args.lasso.inference <- list(sigma = sigma)
 #The goal is to make this work:
-carve_D <-carve.linear(x,y,fraq)
+carve_D <-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 #TODO
 #split <- carve_D$split
 

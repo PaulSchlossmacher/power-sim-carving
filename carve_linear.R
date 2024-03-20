@@ -27,7 +27,9 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   x.b <- x[-split, ]
   y.b <- y[-split]
   sigma <- args.lasso.inference$sigma
-  Sigma <- diag(n.a)*sigma
+  Sigma <- diag(n.a)*sigma#cov of y
+  c1 <- 1-fraq
+  c2 <- fraq
   
   chosen <-  which(abs(beta) > 0) # selected variables
   s <- length(chosen)
@@ -35,6 +37,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   if (s == 0) {
     return(NULL)
   }
+  
   
   
   #extract active variables from both splits

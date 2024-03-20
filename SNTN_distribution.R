@@ -18,8 +18,9 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   m1_z <- (z-theta1)/r.sigma1
   
   #This is the covariance matrix for the bivariate normal dist used by Drysdale
-  cov_matrix <- matrix(c(sigma1, rho * r.sigma1*r.sigma2,
-                    rho * r.sigma1*r.sigma2, sigma2), nrow = 2)
+  #https://github.com/ErikinBC/sntn/blob/main/sntn/_cdf_bvn/_utils.py
+  cov_matrix <- matrix(c(1, rho,
+                    rho, 1), nrow = 2)
   mean_delta <- c(m1_z,delta)
   mean_w <- c(m1_z,w)
   #lower and upper are integration bounds when calculating bivariate CDF

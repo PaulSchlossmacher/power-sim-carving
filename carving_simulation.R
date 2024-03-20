@@ -54,6 +54,16 @@ y <- y.true + sigma * rnorm(n)
 pvals.v <- rep(1,p)
 sel.models <- logical(p)#logical vector initialized with False, this will indicate which predictors are chosen in the model
 
+#The goal is to make this work:
+carve_D <-carve.linear(x,y,fraq)
+#TODO
+#split <- carve_D$split
+
+#can get vlo and vup if using saturated viewpoint, for selected viewpoint we dont get vlo and vup and we get some warnings for
+#hamiltonian sampler
+carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
+                             lambda = lambda, intercept = TRUE,selected=FALSE, verbose = TRUE)
+
 
 
 #should maybe use the tools from this page somehow to obtain v_lo and v_up, 
@@ -61,22 +71,5 @@ sel.models <- logical(p)#logical vector initialized with False, this will indica
 #https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 #i did not yet realize how to obtain these truncation limits from christophs code
 
-#DUMMY TEST for sntn_cdf, exchange these values with the corresponding ones for the distribution of beta_carve
-mu1 <- 0
-tau1 <- 1
-mu2 <- 1
-tau2 <- 2
-a <- 2
-b <- 5
-c1 <- 0.5
-c2 <- 0.5
-# Test value for z
-z <- 1.5
-#call sntn
-sntn_cdf <- SNTN_CDF(z, mu1, tau1, mu2, tau2, a, b, c1, c2)
-# Print the result5
-print(sntn_cdf)
-
-
-#To have a toy example:
 XM<-as.matrix(read.csv("TestData.csv")[,2:11])
+

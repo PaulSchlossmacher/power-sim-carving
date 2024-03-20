@@ -108,3 +108,4 @@ split_select <- function(x,y,fraction = 0.9, family = "gaussian",model.selector 
   sel.models[sel.model] <- TRUE
   return (list(sel.models = sel.models, split = split, beta = beta, lambda = lambda))
 }
+

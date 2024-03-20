@@ -53,39 +53,17 @@ y <- y.true + sigma * rnorm(n)
 pvals.v <- rep(1,p)
 sel.models <- logical(p)#logical vector initialized with False, this will indicate which predictors are chosen in the model
 
+#The goal is to make this work:
+carve_D <-carve.linear(x,y,fraq)
+#TODO
+#split <- carve_D$split
 
-#make a split that yields valid constraints and perform model selection on it
-split_select_list <- split_select(x,y,fraction = fraq)
-beta <- split_select_list$beta
-split <- split_select_list$split
-x_a <- x[split, ]
-y_a <- y[split,]
-x_b <- x[-split, ]
-y_b <- y[-split]
+#can get vlo and vup if using saturated viewpoint, for selected viewpoint we dont get vlo and vup and we get some warnings for
+#hamiltonian sampler
+carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
+                             lambda = lambda, intercept = TRUE,selected=FALSE, verbose = TRUE)
 
-chosen <-  which(abs(beta) > 0) # selected variables
-s <- length(chosen)
-if (s == 0) {
-  return(NULL)
-}
-#Did not account for intercept until now, need to find out how to control selection with or without intercept
-# if (intercept && s == 1) {
-#   return(NULL)
-# }
 
-#extract active variables from both splits
-x_Ma <- x_a[, chosen]
-x_Mb <- x_b[, chosen]
-
-#computes the moore penrose inverse of active variables in both splits
-x_Ma.i <- ginv(x_Ma)
-x_Mb.i <- ginv(x_Mb)
-
-beta_carve <- 1/n*(fraq*x_Ma.i%*%y_a + (1-fraq)*x_Mb.i%*%y_b)
-
-#inverse of information matrix in linear regression: (X^T*X)^-1
-inv.info_a <- tcrossprod(x_Ma.i) #tcrossprod(X,X) does X%*%X^T slightly faster than using the transpose explicitly
-inv.info_b <- tcrossprod(x_Mb.i)
 
 #should maybe use the tools from this page somehow to obtain v_lo and v_up, 
 #otherwise we cannot determine omega and delta from lemma 3.2 in drysdale:
@@ -107,3 +85,5 @@ inv.info_b <- tcrossprod(x_Mb.i)
 # sntn_cdf <- SNTN_CDF(z, mu1, tau1, mu2, tau2, a, b, c1, c2)
 # # Print the result5
 # print(sntn_cdf)
+
+

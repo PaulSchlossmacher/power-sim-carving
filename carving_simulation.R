@@ -1,21 +1,9 @@
-#rm(list=ls())#leave this if we want to empty all global variables
-
-#TODO:add these repositories to github and adapt the paths to work for all of us without modification
-#Paul: I'd say that this is done now
-# hdi_adjustments_path <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Multicarving Christoph/inference/hdi_adjustments.R"
-# carving_path <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Multicarving Christoph/inference/carving.R"
-# sample_from_truncated_path <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Multicarving Christoph/inference/sample_from_truncated.R"
-# tryCatchWE_path <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Multicarving Christoph/inference/tryCatch-W-E.R"
-# SNTN_distribution <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Semester-Project-Multicarving/SNTN_distribution.R"
-# split_select_function <- "C:/Users/Filip/Documents/ETH/Master/Semester 2/Semesterarbeit/Semester-Project-Multicarving/split_select.R"
-
-
 #Local, user specific path, that should work for both of us:
 Local_path<-getwd()
 hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
 
 #Different paths here, because they're "our own" functions
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
@@ -32,17 +20,14 @@ library(doSNOW)
 library(parallel)
 library(doRNG)
 library(truncnorm)
-#I could not download this package, check with Filip whether he could
-#library(git2r)
+library(git2r)
 
 
 source(hdi_adjustments_path)
 source(carving_path)
 source(sample_from_truncated_path)
 source(tryCatchWE_path)
-#Added _path at the end here, to make a clearer distinction
 source(SNTN_distribution_path)
-#Added _path at the end here, to make a clearer distinction
 source(split_select_function_path)
 
 
@@ -86,4 +71,5 @@ carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sig
 #https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 #i did not yet realize how to obtain these truncation limits from christophs code
 
+XM<-as.matrix(read.csv("TestData.csv")[,2:11])
 

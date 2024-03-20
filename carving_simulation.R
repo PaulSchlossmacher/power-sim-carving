@@ -13,9 +13,9 @@
 #Local, user specific path, that should work for both of us:
 Local_path<-getwd()
 hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
 
 #Different paths here, because they're "our own" functions
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
@@ -123,3 +123,27 @@ z <- 1.5
 sntn_cdf <- SNTN_CDF(z, mu1, tau1, mu2, tau2, a, b, c1, c2)
 # Print the result5
 print(sntn_cdf)
+
+
+
+# Try to calculate v_lo and v_up:
+#We have y~N(mu, Sigma)
+XM<-as.matrix(read.csv("TestData.csv")[,2:11])
+n=dim(XM)[1]
+p=dim(XM)[2]
+y=rnorm(20)
+Sigma=diag(c(1:20))
+#This nM is from Drysdale p. 2
+nM=XM%*%solve(t(XM)%*%XM)
+
+#Now this is from Lee, p. 10
+c=Sigma%*%nM%*%solve(t(nM)%*%Sigma%*%nM)
+
+z=(diag(n)-c%*%t(nM))%*%y
+
+V_lower<-0
+V_upper<-0
+
+
+#I'll have to talk to Filip about what the definition of X_{-M} is - is it all the columns that weren't selected?
+#Once we agree on this, it should be pretty easy to implement the rest of beta^Posi manually  

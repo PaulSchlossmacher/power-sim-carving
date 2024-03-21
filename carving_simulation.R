@@ -8,6 +8,8 @@ tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W
 #Different paths here, because they're "our own" functions
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
 split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
+carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+
 
 library(MASS)
 library(mvtnorm)
@@ -29,7 +31,7 @@ source(sample_from_truncated_path)
 source(tryCatchWE_path)
 source(SNTN_distribution_path)
 source(split_select_function_path)
-
+source(carve_linear_path)
 
 
 # toeplitz
@@ -59,10 +61,9 @@ carve_D <-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 #TODO
 #split <- carve_D$split
 
-#can get vlo and vup if using saturated viewpoint, for selected viewpoint we dont get vlo and vup and we get some warnings for
-#hamiltonian sampler
+#I get some warnings for hamiltonian sampler, should compute carve_C under the same split as carve_D in selected viewpoint
 carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
-                             lambda = lambda, intercept = TRUE,selected=FALSE, verbose = TRUE)
+                             lambda = lambda, intercept = TRUE,selected=TRUE, verbose = TRUE)
 
 
 

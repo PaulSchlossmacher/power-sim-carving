@@ -137,6 +137,15 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   #so in our case an all zeros vector of dimension beta_carve_D, for reference: see parameters of run_inference in _lasso.py
   theta.1 <- rep(0,length(beta_carve_D))
   theta.2 <- theta.1
+  ################## TEST SNTN_distribution################################
+  mu1 <- rep(0, length(beta_carve_D))
+  mu2 <-  mu1
+  a <- vlo
+  b <- vup
+  sntn_cdf_arr <- SNTN_CDF(beta_carve_D,mu1, tau.1, mu2, tau.2, a, b, c1, c2)
+  #Liefert alles 1, da mean_delta und mean_w riesig sind, vielleicht müssten wir irgendwo noch unsere daten normalisieren, 
+  #Weiss nicht ob das so sein soll, sonst hätten wir alle pvalues gleich 0
+  #############################################################################
   
   #y~N(x beta^0, tau^2 I_n)
   tau.M=sigma

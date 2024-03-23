@@ -130,3 +130,34 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   # pvals <- 1 - SNTN_CDF(beta_carve_D, ...)
   
 }
+
+
+
+### Theoretical notes:
+
+#I asked Filip on Friday how you actually compute things when you only want to condition on one sign pattern.
+#Lee makes this clear on p. 15:
+#"Conditioning on the signs means that we only have to compute the interval [V−s (z), V+s (z)]
+#for the sign pattern s that was actually observed."
+
+#We see right under Theorem 5.3 in Lee, that V-s(z) and V+s(z) are defined through
+# A=As and b=bs
+#And s influences the definitions of A1(M,s) and b1(M,s) respectively.
+
+#Since s is in {-1,1}^|M|, it's only defined for variables that are actually selected, so
+#the computation of the signs is straightforward (I mention this, because we had some confusion
+#with a similar thing in another paper where we had s in [-1,1]^|M| or sth like this )
+
+
+#Question: Which beta^hat are we actually using though to get the signs?
+#A priori all of beta^carve, beta^POSI and beta^SPLIT seem at least viable
+
+#Thinking about it, I guess that since we are talking about M (i.e. M_A) all the time, it is probably 
+#beta^Split, which is also the beta we are working with in the code above. In fact, Filip already 
+#implemented it exactly like that above.
+
+
+#Question: If we only have eta in R^nx1 for a single polyhedron and eta_M in R^nx|M| for the union of polyhedra:
+#What eta_M do we actually use now when we additionally condition on the signs, to only have one polyhedron?
+
+3+5

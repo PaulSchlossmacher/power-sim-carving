@@ -73,20 +73,61 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   
   A <- rbind(A.0, A.1)# (2p-s) x n.a
   b <- rbind(b.0,b.1)
-  c <- Sigma %*% t(x.Ma.i) %*% solve(x.Ma.i %*% Sigma %*% t(x.Ma.i))
-  
-  z <- (diag(n.a) - c %*% x.Ma.i) %*% y.a
+  #c <- Sigma %*% t(x.Ma.i) %*% solve(x.Ma.i %*% Sigma %*% t(x.Ma.i))
+  #z <- (diag(n.a) - c %*% x.Ma.i) %*% y.a
   
   #TODO: Need to handle these if empty, set to inf or -inf respectively
-  ind.vup <- (A %*% c > 0)
-  ind.vlo <- (A %*% c < 0)
+  # ind.vup <- (A %*% c > 0)
+  # ind.vlo <- (A %*% c < 0)
   
   #TODO:There's an error here, as the dimensions do not match. I think we have overseen that A%*%c is a matrix, hence division is ambiguous.
   #Drysdale solves this issue over a for loop in inference_on_screened inside _lasso.py. There he does it row by row of eta.T.
   #If i am not mistaken, then v_i is a column of c (equation 5.3 in Lee et al.) i am just not sure why he uses the signs of beta_hat in this equation, 
   #while resid_i is z.
-  vup <- max((b-A %*% z)/(A %*% c)[ind.vup])
-  vlo <- max((b-A %*% z)/(A %*% c)[ind.vlo])
+  # vup <- min((b-A %*% z)/(A %*% c)[ind.vup])
+  # vlo <- max((b-A %*% z)/(A %*% c)[ind.vlo])
+  
+  
+  #Following a mix of Lee (https://github.com/selective-inference/R-software/blob/master/selectiveInference/R/funs.fixed.R) from line 231
+  #and Drysdale (https://github.com/ErikinBC/sntn/blob/main/sntn/_lasso.py) from line 195
+  vup <- rep(0,s)
+  vlo <- rep(0,s)
+  norm_consts <- rep(0,s)
+  for (i in 1:s){
+    v.i <- x.Ma.i[i,]
+    v.i.norm <- sqrt(sum(v.i^2))
+    eta <- b.signs[i]*v.i/v.i.norm
+    c <- (Sigma %*% eta) / as.numeric((t(eta) %*% Sigma %*% eta))
+    z <- (diag(n.a) - c %*% t(eta)) %*% y.a
+    den <- A%*%c
+    resid <- b-A %*% z
+    ind.vup <- (A %*% c > 0)
+    ind.vlo <- (A %*% c < 0)
+    if (any(ind.vup)){
+      vup[i] <- min(resid[ind.vup]/den[ind.vup])
+    }else {
+      vup[i] <- Inf
+    }
+    
+    if (any(ind.vlo)){
+      vlo[i] <- max(resid[ind.vlo]/den[ind.vlo])
+    }else {
+      vlo[i] <- Inf
+    }
+    norm_consts[i] <- v.i.norm
+  }
+    
+  #Scale back, this is what Drysdale does, not sure if necessary
+  eta_var <- sigma * (norm_consts^2)
+  vlo <- vlo * norm_consts
+  vup <- vup * norm_consts
+  # Return to original signs
+  mask = (b.signs == -1)
+  vlo[mask] <- -vlo[mask]
+  vup[mask] <- -vup[mask]
+  tau.1 <- sigma
+  tau.2 <- eta_var
+  
   
   
   #I'm not sure about this yet, but at least in the analogy to OLS I think it makes sense:

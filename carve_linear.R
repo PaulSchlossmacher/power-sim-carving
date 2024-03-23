@@ -1,8 +1,5 @@
 #splits the data, performs selection on one split, calculates p-values of carving estimator as in Drydale's paper
 
-
-
-
 carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian", model.selector = lasso.cvcoef,
                           args.model.selector = list(intercept = TRUE, standardize = FALSE, tol.beta = 1e-5),
                           df.corr = FALSE, args.lasso.inference = list(sigma = sigma), verbose = FALSE){
@@ -12,6 +9,20 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   
   args.model.selector$family <- family
   args.lasso.inference$family <- family
+  
+  
+  #Normalize x and y before starting:
+  y<-y-mean(y)
+  
+  for (j in dim(x)[2]){
+    xjbar<-mean(x[,j])
+    #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
+    sigma_j<-sum((x[,j]-xjbar)^2)/length(a)
+    for (i in dim(x)[1]){
+      x[i,j]<-(x[i,j]-xjbar)/sigma_j
+    }
+  }
+  
   
   split.select.list <- split.select(x,y,fraction = fraq)
   beta <- split.select.list$beta
@@ -28,8 +39,10 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   y.b <- y[-split]
   sigma <- args.lasso.inference$sigma
   Sigma <- diag(n.a)*sigma#cov of y
-  c1 <- 1-fraq
-  c2 <- fraq
+  #c1 <- 1-fraq
+  #c2 <- fraq
+  c1<-n.b/n
+  c2<-n.a/n
   
   chosen <-  which(abs(beta) > 0) # selected variables
   s <- length(chosen)
@@ -128,11 +141,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   tau.1 <- sigma
   tau.2 <- eta_var
   
-  
-  
-  #I'm not sure about this yet, but at least in the analogy to OLS I think it makes sense:
-  #There we also build confidence intervals etc. based on beta^hat.
-  beta.M=beta_carve_D
+
   #REMARK: Drysdale sets theta1 = theta2 = beta_null for the sntn dist, where beta_null is the assumed beta under the null, 
   #so in our case an all zeros vector of dimension beta_carve_D, for reference: see parameters of run_inference in _lasso.py
   theta.1 <- rep(0,length(beta_carve_D))
@@ -156,11 +165,17 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   #For refernce: see lasso.run_inference in run_carve, in the if clause he defines tau22 = eta2var, which is a scaled version of 
   #sigma2
   
+  #Defined beta^M=0, because we think this is correct for the null hypothesis
+  beta.M=rep(0,length(beta_carve_D))  
+  #beta.M=beta_carve_D
+  
 
   #In the Drysdale paper, sigma_1 gets defined via the entry jj for all j. Therefore we take the diagonal
   #of the matrix and work with that
   #Since it's a diagonal matrix, we can just apply the inverse at the end, which is
   #computationally easier
+
+  
   sigma.1=(tau.M/n^2)*((n.b^2*diag((t(x.Mb)%*%x.Mb))^-1)+(n.a^2*diag((t(x.Ma)%*%x.Ma))^-1))
   sigma.2=tau.M*diag((t(x.Ma)%*%x.Ma))^-1
   w=(vlo-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
@@ -171,15 +186,45 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   rho=sqrt(n*n.a)*(diag(t(x.Ma)%*%x.Ma))^(-1/2)/
     sqrt(n.b^2*diag((t(x.Mb)%*%x.Mb))^-1 + n.a^2*diag((t(x.Ma)%*%x.Ma))^-1)
   #This return is used for debugging
-  return(list(sigma.1 = sigma.1, sigma.2 = sigma.2, w = w, delta = delta, w = w))
+  # return(list(sigma.1 = sigma.1,
+  #             sigma.2 = sigma.2,
+  #             w = w,
+  #             delta = delta,
+  #             tau.M=tau.M,
+  #             beta_carve=beta_carve_D))
+  # 
+  
+  #Paul trying to calculate the distribution of beta^Carve explicitly:
+  #Note: The function in Lemma 3.1 is defined for scalar inputs. Filip implemented 
+  #SNTN for vectors, which should make things easier -> Watch out for jjth entry of tau1 and
+  #tau2 - not sure whether those will work as well (we are not considering yet that we only want those
+  #instead of the whole matrix)
+  
+  
+  pvals<-SNTN_CDF(z=beta_carve_D,
+           mu1=rep(0,length(beta_carve_D)),
+           tau1=tau.M*solve(t(x.Ma)%*%x.Ma),
+           mu2=rep(0,length(beta_carve_D)),
+           tau2=tau.M*solve(t(x.Mb)%*%x.Mb),
+           a=vlo,
+           b=vup,
+           c1=c1, 
+           c2=c2)
+  return(pvals)
+  
   #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
   #It seems to me, that my sntn_cdf would deliver different results for these quantities, see e.g. sigma2 <- tau2 in sntn_cdf, 
-  #wheras sigma.2 in the lines above takes into account the whole variance of beta_posi. A general seperate sntn_cdf function needs a 
+  #wheras sigma.2 in the lines above takes into account the whole variance of beta_posi. A general seperate function needs a 
   #bit more refinement to perform as desired. So we can try to do it inside of here again:
 
   # pvals <- 1 - SNTN_CDF(beta_carve_D, ...)
   
 }
+
+
+#Paul trying to calculate the distribution of beta^Carve explicitly:
+#(See pvals above to see how the output is created)
+Res<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 
 
 
@@ -210,4 +255,17 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
 #Question: If we only have eta in R^nx1 for a single polyhedron and eta_M in R^nx|M| for the union of polyhedra:
 #What eta_M do we actually use now when we additionally condition on the signs, to only have one polyhedron?
 
-3+5
+
+#Questions for Christoph:
+#When normalizing the data at the beginning, we did it with the estimator of the standard deviation,
+#which divides by n instead of n-1, because Prof. Bühlmann did it like this in his lecture.
+#Is this correct and does it have any consequences in the following? Maybe incompatibility with other packages,
+#use a different estimator?
+#I'm guessing that it shouldn't be an issue because the whole columns are still the same
+#up to multiplicity regardless of the method
+
+
+#Regarding n_A /n_B: 
+#On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bigger group) and that
+#beta^Carve=w_A*beta^Split + w_B*beta^Posi
+#But in Lemma 3.2 on p. 4 he writes: n_B*beta^split in the definition of beta_j

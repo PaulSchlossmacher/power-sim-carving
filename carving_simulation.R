@@ -64,7 +64,7 @@ carve_D <-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 #I get some warnings for hamiltonian sampler, should compute carve_C under the same split as carve_D in selected viewpoint
 carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
                              lambda = lambda, intercept = TRUE,selected=TRUE, verbose = TRUE)
-
+c
 
 
 #should maybe use the tools from this page somehow to obtain v_lo and v_up, 

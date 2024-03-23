@@ -1,5 +1,8 @@
+#Paul: We might need this later, I'm not sure yet.
+#Still have to modify it, to make it 1-dim anyways
 
-SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
+
+SNTN_CDF_1dim <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   #Following Lemma 3.1 from Drysdale paper
   #REMARK: Adapted to work for vector inputs, in this case it will also return a
   #vector of cdf values for each entry of z

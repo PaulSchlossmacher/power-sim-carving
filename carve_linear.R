@@ -56,7 +56,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   p.Ma <- x.Ma %*% x.Ma.i#(n.a x n.a)
   
   #compute the beta_carve from drysdales paper
-  beta_carve_D <- n*(fraq*x.Ma.i %*% y.a + (1-fraq)*x.Mb.i %*% y.b)
+  beta_carve_D <- n*((n.a/n)*x.Ma.i %*% y.a + (n.b/n)*x.Mb.i %*% y.b)
   
   #Get inactive affine constraints on split A, as this is the group where we are doing POSI(Lee et al. page 8)
   A.0.up <- (t(x_Ma) %*% (diag(n.a) - p.Ma))#(p-s) x n.a

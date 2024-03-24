@@ -1,18 +1,19 @@
 
 SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
+  #Note: the input variances are already squared
+  
   #Following Lemma 3.1 from Drysdale paper
   #REMARK: Adapted to work for vector inputs, in this case it will also return a
   #vector of cdf values for each entry of z
   s <- length(z)
   theta1 <- c1 * mu1 + c2 * mu2
-  #Attention here Filip wrote (tau1)^2 and (tau2)^2, but they are already passed as squares to the function
   sigma1 <- (c1)^2 * tau1 + (c2)^2 * tau2
   r.sigma1 <- sqrt(sigma1)
   theta2 <- mu2
   sigma2 <- tau2
   r.sigma2 <- sqrt(sigma2)
   rho <- c2 * r.sigma2 / r.sigma1
-  if (min(rho) <= -1 | max(rho) >= 1) {
+  if (min(rho) < -1 | max(rho) > 1) {
     stop("Invalid correlation coefficient rho. It should be between -1 and 1.")
   }
   lambda <- rho / sqrt(1 - rho^2)
@@ -25,6 +26,7 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   #https://github.com/ErikinBC/sntn/blob/main/sntn/_cdf_bvn/_utils.py
   sntn_cdf_arr <- rep(0,s)
   for (i in 1:s){
+    #Standard bivariate normal with correlation rho:
     cov_matrix <- matrix(c(1, rho[i],
                            rho[i], 1), nrow = 2)
     mean_delta <- c(m1_z[i],delta[i])
@@ -34,11 +36,9 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
     bn_cdf_w <- pmvnorm(lower = c(-Inf, -Inf), upper = mean_w, mean = c(0,0), sigma = cov_matrix,keepAttr = FALSE)
     n_cdf_delta <- pnorm(delta[i])
     n_cdf_w <- pnorm(w[i])
-    #TODO: Need to handle division by zero, on some runs i get all bn_cdfs and n_cdfs to be 1, which yields Nan values for sntn_cdf
-    sntn_cdf <- (bn_cdf_delta - bn_cdf_w)/(n_cdf_delta - n_cdf_w)
-    sntn_cdf_arr[i] <- sntn_cdf
-    #TODO: Need to handle division by zero, on some runs I get all bn_cdfs and n_cdfs to be 1, which yields Nan values for sntn_cdf
-    #Paul: Done, see below:
+
+    #If clauses to handle division by 0: This is slightly different to what Drysdale
+    #does, but the most conservative approach (in the sense of avoiding Type I errors)
     if (bn_cdf_delta==bn_cdf_w & n_cdf_delta==n_cdf_w){
       sntn_cdf_arr[i] <- 0
     }
@@ -59,26 +59,8 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
 
 
 
-#-------------------       Testing for the if else statements that avoid division by 0. ----------------------------------
-# Res<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
-# delta<-Res$delta
-# w<-Res$w
-# sigma1<-Res$sigma.1
-# theta1<-0
-# m1_z<-(Res$beta-0)/sigma1
-# rho=Res$rho
-# cov_matrix <- matrix(c(1, rho[1],
-#                        rho[1], 1), nrow = 2)
-# #Test out the denominator of F, to see whether it'S actually sensible to set the result to 0 or whether the numerator is also 0:
-# mean_delta <- c(m1_z[1],delta[1])
-# mean_w <- c(m1_z[1],w[1])
-# #lower and upper are integration bounds when calculating bivariate CDF
-# bn_cdf_delta <- pmvnorm(lower = c(-Inf, -Inf), upper = mean_delta, mean = c(0,0), sigma = cov_matrix,keepAttr = FALSE)
-# bn_cdf_w <- pmvnorm(lower = c(-Inf, -Inf), upper = mean_w, mean = c(0,0), sigma = cov_matrix,keepAttr = FALSE)
-# #Turns out that both summands of the numerator=1, so the numerator is also =0.
-# #Therefore the more conservative decision is to set the prob to 0, so that the p-value is 1.
 
-
+## ----------- Testing of our cdf -----------------
 
 # #What result does the cdf give for very "average" inputs?
 # #We'd hope for sth like 1/2 here.

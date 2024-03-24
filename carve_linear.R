@@ -3,18 +3,8 @@
 set.seed(42)
 #Set the seed to have replicabiltiy while debugging
 
-carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian", model.selector = lasso.cvcoef,
-                          args.model.selector = list(intercept = TRUE, standardize = FALSE, tol.beta = 1e-5),
-                          df.corr = FALSE, args.lasso.inference = list(sigma = sigma), verbose = FALSE){
-  #binomial not implemented yet
-  if (!(family %in% c("gaussian", "binomial")))
-    stop ("Invalid family provided, can only deal with gaussian and binomial")
-  
-  args.model.selector$family <- family
-  args.lasso.inference$family <- family
-  
-  fraq=fraction
-  
+carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = TRUE),
+                         sigma=sigma){
   
   #Normalize x and y before starting:
   y<-y-mean(y)
@@ -28,10 +18,11 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
     }
   }
   
-  
-  split.select.list <- split.select(x,y,fraction = fraq)
+  #1-split-select from Christoph's carve.Lasso:
+  #Splits data and selects active variables while checking constraints.
+  split.select.list <- split.select(x,y,fraction = fraction)
   beta <- split.select.list$beta
-  beta <- beta[-1]#exclude intercept for now
+  #beta <- beta[-1] #exclude intercept for now
   lambda <- split.select.list$lambda
   split <- split.select.list$split
   n <- length(y)
@@ -39,22 +30,21 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   n.a <- length(split)
   n.b <- n-n.a
   x.a <- x[split, ]
-  y.a <- y[split,]
+  y.a <- y[split, ]
   x.b <- x[-split, ]
-  y.b <- y[-split]
-  sigma <- args.lasso.inference$sigma
-  Sigma <- diag(n.a)*sigma#cov of y
-  #c1 <- 1-fraq
-  #c2 <- fraq
+  y.b <- y[-split, ]
+  sigma <- sigma
+  #Sigma gets chosen in accordance with the distribution of y_A in Lemma 3.2
+  Sigma <- diag(n.a)*sigma
   c1<-n.b/n
   c2<-n.a/n
   
   chosen <-  which(abs(beta) > 0) # selected variables
   s <- length(chosen)
   b.signs <- sign(beta[chosen])
-  if (s == 0) {
-    return(NULL)
-  }
+
+  if (s == 0)
+    stop("0 variables were chosen by the Lasso")
   
   #extract active variables from both splits
   x.Ma <- x.a[, chosen]#(n.a x s)
@@ -74,7 +64,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   p.Ma <- x.Ma %*% x.Ma.i#(n.a x n.a)
   
   #compute the beta_carve from drysdales paper
-  beta_carve_D <- n*((n.a/n)*x.Ma.i %*% y.a + (n.b/n)*x.Mb.i %*% y.b)
+  beta_carve_D <- ((n.a/n)*x.Ma.i %*% y.a + (n.b/n)*x.Mb.i %*% y.b)
   
   #Get inactive affine constraints on split A, as this is the group where we are doing POSI(Lee et al. page 8)
   A.0.up <- (t(x_Ma) %*% (diag(n.a) - p.Ma))#(p-s) x n.a
@@ -84,23 +74,15 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   b.0.lo <- rep(1,p-s) + b.0.temp
   b.0 <- rbind(b.0.up, b.0.lo)#2*(p-s) x n.a
   
-  #Get active affine costraints on split A
+  #Get active affine constraints on split A
   C <- solve(crossprod(x.Ma,x.Ma))#(X_Ma^T*X_Ma)^-1
   A.1 <- -diag(x = b.signs, nrow = s) %*% x.Ma.i # (s x n.a)
-  b.1 <- -diag(x = b.signs, nrow = s) %*% C %*% (lambda * b.signs)#Here Christoph differentiates for intercept
+  b.1 <- -lambda*diag(x = b.signs, nrow = s) %*% C %*% b.signs#Here Christoph differentiates for intercept
   
   A <- rbind(A.0, A.1)# (2p-s) x n.a
   b <- rbind(b.0,b.1)
   
-  #c <- Sigma %*% t(x.Ma.i) %*% solve(x.Ma.i %*% Sigma %*% t(x.Ma.i))
-  #z <- (diag(n.a) - c %*% x.Ma.i) %*% y.a
-  #TODO:There's an error here, as the dimensions do not match. I think we have overseen that A%*%c is a matrix, hence division is ambiguous.
-  #Drysdale solves this issue over a for loop in inference_on_screened inside _lasso.py. There he does it row by row of eta.T.
-  #If i am not mistaken, then v_i is a column of c (equation 5.3 in Lee et al.) i am just not sure why he uses the signs of beta_hat in this equation, 
-  #while resid_i is z.
-  # vup <- min((b-A %*% z)/(A %*% c)[ind.vup])
-  # vlo <- max((b-A %*% z)/(A %*% c)[ind.vlo])
-  
+
   
   #Following a mix of Lee (https://github.com/selective-inference/R-software/blob/master/selectiveInference/R/funs.fixed.R) from line 231
   #and Drysdale (https://github.com/ErikinBC/sntn/blob/main/sntn/_lasso.py) from line 195
@@ -115,6 +97,8 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
     z <- (diag(n.a) - c %*% t(eta)) %*% y.a
     den <- A%*%c
     resid <- b-A %*% z
+    #We do not consider the set V^0(z) as defined in Lee p.10, because
+    #Drysdale does not do so either
     ind.vup <- (A %*% c > 0)
     ind.vlo <- (A %*% c < 0)
     if (any(ind.vup)){
@@ -135,103 +119,53 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   eta_var <- sigma * (norm_consts^2)
   vlo <- vlo * norm_consts
   vup <- vup * norm_consts
-  # Return to original signs
+  # Turn all signs positive, as Drysdale does
   mask = (b.signs == -1)
   vlo[mask] <- -vlo[mask]
   vup[mask] <- -vup[mask]
-  tau.1 <- sigma
-  tau.2 <- eta_var
+  #See comments in the RMD file for tau.1 and tau.2
+  #tau.1 <- sigma
+  #tau.2 <- eta_var
   
 
   #REMARK: Drysdale sets theta1 = theta2 = beta_null for the sntn dist, where beta_null is the assumed beta under the null, 
   #so in our case an all zeros vector of dimension beta_carve_D, for reference: see parameters of run_inference in _lasso.py
-  theta.1 <- rep(0,length(beta_carve_D))
+  theta.1 <- rep(0,s)
   theta.2 <- theta.1
-  ################## TEST SNTN_distribution################################
-  mu1 <- rep(0, length(beta_carve_D))
-  mu2 <-  mu1
-  # a <- vlo
-  # b <- vup
-  # sntn_cdf_arr <- SNTN_CDF(beta_carve_D,mu1, tau.1, mu2, tau.2, a, b, c1, c2)
-  #Liefert alles 1, da mean_delta und mean_w riesig sind, vielleicht müssten wir irgendwo noch unsere daten normalisieren, 
-  #Weiss nicht ob das so sein soll, sonst hätten wir alle pvalues gleich 0
-  #############################################################################
   
   #y~N(x beta^0, tau^2 I_n)
   tau.M=sigma
-  #We assume - to start off with - that tau^2=tau_M^2. Drysdale does mention on p. 3 that 
-  #it could happen that sigma_M^2>sigma^2 due to some covariates being left out
-  #REMARK: Drysdale chooses our tau.M for tau.1(for the distribution of beta_split), but uses some scaled version for 
-  #the tau.2 (for the truncated distribution of beta_posi). The choice of this scaling is not yet clear to me
-  #For refernce: see lasso.run_inference in run_carve, in the if clause he defines tau22 = eta2var, which is a scaled version of 
-  #sigma2
-  
-  #Defined beta^M=0, because we think this is correct for the null hypothesis
-  beta.M=rep(0,length(beta_carve_D))  
-  #beta.M=beta_carve_D
-  
 
-  #In the Drysdale paper, sigma_1 gets defined via the entry jj for all j. Therefore we take the diagonal
-  #of the matrix and work with that
-  #Since it's a diagonal matrix, we can just apply the inverse at the end, which is
-  #computationally easier
+  #Defined beta^M=0 for testing the null hypothesis
+  beta.M=rep(0,s)  
 
-  
-  sigma.1=(tau.M/n^2)*((n.b^2*diag((t(x.Mb)%*%x.Mb))^-1)+(n.a^2*diag((t(x.Ma)%*%x.Ma))^-1))
-  sigma.2=tau.M*diag((t(x.Ma)%*%x.Ma))^-1
-  w=(vlo-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
-  delta=(vup-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
-  
-  #I'm assuming that we need the jj-th entry again here everywhere. Otherwise division 
-  #wouldn't make sense and we'd need to build some sort of framework for allowing the sqrt
-  rho=sqrt(n*n.a)*(diag(t(x.Ma)%*%x.Ma))^(-1/2)/
-    sqrt(n.b^2*diag((t(x.Mb)%*%x.Mb))^-1 + n.a^2*diag((t(x.Ma)%*%x.Ma))^-1)
-  #This return is used for debugging
-  # return(list(sigma.1 = sigma.1,
-  #             sigma.2 = sigma.2,
-  #             w = w,
-  #             delta = delta,
-  #             tau.M=tau.M,
-  #             beta_carve=beta_carve_D))
 
-  
-  #Paul trying to calculate the distribution of beta^Carve explicitly:
-  #Note: The function in Lemma 3.1 is defined for scalar inputs. Filip implemented 
-  #SNTN for vectors, which should make things easier -> Watch out for jjth entry of tau1 and
-  #tau2 - not sure whether those will work as well (we are not considering yet that we only want those
-  #instead of the whole matrix)
-  
-  #Filip inserted diag to tau1 and tau2, as all the rest information in the matrix is not used, and the SNTN_distribution handles
-  #vectors well, but the for loop would have to be adapted to work for a matrix rho, which is not necessary I think.
-  #Furthermore i switched the values of tau1 and tau2, as in lemma 3.2 sigma2 = tau_M^2*(t(X.Ma)%*%x.Ma)^-1, which corresponds to 
-  #Lemma 3.1: sigma2 = tau2^2. Not sure if Paul found it somewhere differently. This still gives cdf_values of 1....
-  
-  #Food for thought: should tau.M in the assignment of tau2 be chosen as eta_var, the scaled variance we get from the norm of the directions eta?
-  #Or add it as additional question for Christoph, as we are still not exactly sure about the nature of tau.M. E.g. sigma1^2 in 
-  #Lemma 3.1 has tau.M factored out, suggesting there is no difference between tau.M of group A and tau.M of group B.
-  #As of the similarity in notation with beta_j^M, it could be the variance of beta_hat under the null hypothesis.
-  
   pvals<-1-SNTN_CDF(z=beta_carve_D,
-           mu1=rep(0,length(beta_carve_D)),
+           mu1=theta.1,
            tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
-           mu2=rep(0,length(beta_carve_D)),
+           mu2=theta.2,
            tau2=diag(tau.M*solve(t(x.Ma)%*%x.Ma)),
            a=vlo,
            b=vup,
            c1=c1,
            c2=c2)
-  #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
-  #It seems to me, that my sntn_cdf would deliver different results for these quantities, see e.g. sigma2 <- tau2 in sntn_cdf, 
-  #wheras sigma.2 in the lines above takes into account the whole variance of beta_posi. A general seperate function needs a 
-  #bit more refinement to perform as desired. So we can try to do it inside of here again:
-
-  # pvals <- 1 - SNTN_CDF(beta_carve_D, ...)
+  
   
   return(list(pvals = pvals,split = split, beta = beta, lambda = lambda))
-  
 }
 
 
-#Paul trying to calculate the distribution of beta^Carve explicitly:
-#(See pvals above to see how the output is created)
-carve_D<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
+
+#----------------------For manually computing these values: -----------------------------------------
+#In the Drysdale paper, sigma_1 gets defined via the entry jj for all j. Therefore we take the diagonal
+#of the matrix and work with that
+#Since it's a diagonal matrix, we can just apply the inverse at the end, which is
+#computationally easier
+# sigma.1=(tau.M/n^2)*((n.b^2*diag((t(x.Mb)%*%x.Mb))^-1)+(n.a^2*diag((t(x.Ma)%*%x.Ma))^-1))
+# sigma.2=tau.M*diag((t(x.Ma)%*%x.Ma))^-1
+# w=(vlo-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
+# delta=(vup-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
+#I'm assuming that we need the jj-th entry again here everywhere. Otherwise division 
+# wouldn't make sense and we'd need to build some sort of framework for allowing the sqrt
+# rho=sqrt(n*n.a)*(diag(t(x.Ma)%*%x.Ma))^(-1/2)/
+#   sqrt(n.b^2*diag((t(x.Mb)%*%x.Mb))^-1 + n.a^2*diag((t(x.Ma)%*%x.Ma))^-1)

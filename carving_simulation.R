@@ -33,8 +33,7 @@ source(SNTN_distribution_path)
 source(split_select_function_path)
 source(carve_linear_path)
 
-
-# toeplitz
+#-------------------- Toeplitz Carving simulation from Christoph ----------------------
 n <- 100
 p <- 200
 rho <- 0.6
@@ -42,7 +41,6 @@ fraq = 0.9
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 sel.index <- c(1, 5, 10, 15, 20)#active predictors
-ind <- sel.index
 beta <- rep(0, p)#initialize beta as all zeros
 beta[sel.index] <- 1#put ones at active predictor positions
 sparsity <- 5
@@ -53,30 +51,13 @@ SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 2
 y <- y.true + sigma * rnorm(n)
 
-pvals.v <- rep(1,p)
-sel.models <- logical(p)#logical vector initialized with False, this will indicate which predictors are chosen in the model
-args.lasso.inference <- list(sigma = sigma)
-#The goal is to make this work:
-carve_D <-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
-#TODO
-split.select.list <- split.select(x,y,fraction = fraq)
-beta <- split.select.list$beta
-#beta <- beta[-1]#exclude intercept for now
-lambda <- split.select.list$lambda
-split <- split.select.list$split
-# split <- carve_D$split
-# beta <- carve_D$beta
-# lambda <- carve_D$lambda
 
-#I get some warnings for hamiltonian sampler, should compute carve_C under the same split as carve_D in selected viewpoint
-carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
+#Here we run the simulation with beta_Carve^Drysdale
+carve_D <-carve.linear(x,y,fraq,sigma=sigma)
+split <- carve_D$split
+beta_tmp <- carve_D$beta
+lambda <- carve_D$lambda
+
+#We get some warnings for hamiltonian sampler
+carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
                              lambda = lambda, intercept = FALSE,selected=TRUE, verbose = TRUE)
-
-
-#should maybe use the tools from this page somehow to obtain v_lo and v_up, 
-#otherwise we cannot determine omega and delta from lemma 3.2 in drysdale:
-#https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
-#i did not yet realize how to obtain these truncation limits from christophs code
-
-XM<-as.matrix(read.csv("TestData.csv")[,2:11])
-

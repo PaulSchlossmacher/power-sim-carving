@@ -53,12 +53,13 @@ On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bi
 $$\hat\beta^{Carve}=w_A*\hat\beta^{Split} + w_B*\hat\beta^{Posi}$$
 But in Lemma 3.2 on p. 4 he writes in the definition of $\hat \beta_j$:
 $$n_B*\beta^{split} \ldots$$
+### Regarding the choice of tau_m^2 in Lemma 3.2
+In Lemma 3.2 Drysdale implements $\sigma_1^2$ with one $\tau_M^2$ for both the POSI and the SPLIT part. In our implementation we chose $\tau_M^2=\sigma^2$ with $\sigma^2$ assumed to be known and $y\sim N(X\beta^0, \sigma^2I_n)$. However in his code of _lasso.py on row 302, Drysdale uses two different $\tau$ for POSI and SPLIT: $\tau_M$ for $\tau_1$ (for the distribution of $\beta^{SPLIT}$), but uses some scaled version for $\tau_2$ (for the truncated distribution of $\beta^{POSI}$). The choice of this scaling is unclear to us.
+
+
 
 ### Regarding vlo/vup:
 When calculating the truncation limits vlo and vup, we tried to do it similarly to what Drysdale does in his code. Mainly, we take a normalized row of the moore penrose inverse of x.Ma together with the sign of beta_split as the direction eta, calculate vlo and vup as proposed in Lee et al., but then at the end we rescale vlo and vup as well as the variance of the TN distribution by the length of the directions we considered. Why is the rescaling necessary and why is it nowhere mentioned?
-
-As of now, we get sntn_cdf values of 1, mainly due to very high mean_delta and mean_w values. Normalizing the data did not resolve this.
-
 
 
 # Changes Made
@@ -66,7 +67,7 @@ As of now, we get sntn_cdf values of 1, mainly due to very high mean_delta and m
 * Moved the theoretical notes over from carve_linear to this markdown file
 
 * Try whether we get reasonable values from the SNTN Cdf when putting in very "average" values
-** For z=0, 1,-1 respectively, we got the values 1/2, 0.86, 0.13, which seems reasonable (not sure how much the standard deviation rules of the normal distribution still aplly here)
+** For z=0, 1,-1 respectively, we got the values 1/2, 0.86, 0.13, which seems reasonable (not sure how much the standard deviation rules of the normal distribution still apply here)
 
 * Added set.seed(42) to carve.linear to have replicability while debugging.
 
@@ -81,3 +82,8 @@ As of now, we get sntn_cdf values of 1, mainly due to very high mean_delta and m
 ** Remedy: Since in this case even in theory, i.e. without computational approximation to 1, $\Phi(\delta)-\Phi(\omega)$ would be very small, as a consequence the whole of F would be very big, i.e (almost) equal to 1. Therefore: We implemented an if clause that sets F(z) to 1, if $\Phi(\delta)=\Phi(\omega)$
 ** However: In these cases it also tends to be that the numerator = 0, i.e $B_{\rho}(m_1(z), \delta)=B_{\rho}(m_1(z), \omega)$ because of the same reasons as above. Since we don't know which one of numerator and denominator is actually bigger in this case, we set the probability to 0 by hand, which results in the p-value being set to 1. While this is unsatisfactory, it is the more conservative decision.
 ** Up for discussion: Maybe leaving it as NA would actually be the best decision?
+
+
+
+# Further literature
+* PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

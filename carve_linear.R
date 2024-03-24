@@ -1,5 +1,8 @@
 #splits the data, performs selection on one split, calculates p-values of carving estimator as in Drydale's paper
 
+set.seed(42)
+#Set the seed to have replicabiltiy while debugging
+
 carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian", model.selector = lasso.cvcoef,
                           args.model.selector = list(intercept = TRUE, standardize = FALSE, tol.beta = 1e-5),
                           df.corr = FALSE, args.lasso.inference = list(sigma = sigma), verbose = FALSE){
@@ -10,6 +13,8 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   args.model.selector$family <- family
   args.lasso.inference$family <- family
   
+  fraq=fraction
+  
   
   #Normalize x and y before starting:
   y<-y-mean(y)
@@ -17,7 +22,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   for (j in dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
-    sigma_j<-sum((x[,j]-xjbar)^2)/length(a)
+    sigma_j<-sum((x[,j]-xjbar)^2)/length(x[,j])
     for (i in dim(x)[1]){
       x[i,j]<-(x[i,j]-xjbar)/sigma_j
     }
@@ -121,7 +126,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
     if (any(ind.vlo)){
       vlo[i] <- max(resid[ind.vlo]/den[ind.vlo])
     }else {
-      vlo[i] <- Inf
+      vlo[i] <- -Inf
     }
     norm_consts[i] <- v.i.norm
   }
@@ -145,9 +150,9 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   ################## TEST SNTN_distribution################################
   mu1 <- rep(0, length(beta_carve_D))
   mu2 <-  mu1
-  a <- vlo
-  b <- vup
-  sntn_cdf_arr <- SNTN_CDF(beta_carve_D,mu1, tau.1, mu2, tau.2, a, b, c1, c2)
+  # a <- vlo
+  # b <- vup
+  # sntn_cdf_arr <- SNTN_CDF(beta_carve_D,mu1, tau.1, mu2, tau.2, a, b, c1, c2)
   #Liefert alles 1, da mean_delta und mean_w riesig sind, vielleicht müssten wir irgendwo noch unsere daten normalisieren, 
   #Weiss nicht ob das so sein soll, sonst hätten wir alle pvalues gleich 0
   #############################################################################
@@ -188,7 +193,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   #             delta = delta,
   #             tau.M=tau.M,
   #             beta_carve=beta_carve_D))
-  # 
+
   
   #Paul trying to calculate the distribution of beta^Carve explicitly:
   #Note: The function in Lemma 3.1 is defined for scalar inputs. Filip implemented 
@@ -200,11 +205,13 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   #vectors well, but the for loop would have to be adapted to work for a matrix rho, which is not necessary I think.
   #Furthermore i switched the values of tau1 and tau2, as in lemma 3.2 sigma2 = tau_M^2*(t(X.Ma)%*%x.Ma)^-1, which corresponds to 
   #Lemma 3.1: sigma2 = tau2^2. Not sure if Paul found it somewhere differently. This still gives cdf_values of 1....
+  
   #Food for thought: should tau.M in the assignment of tau2 be chosen as eta_var, the scaled variance we get from the norm of the directions eta?
   #Or add it as additional question for Christoph, as we are still not exactly sure about the nature of tau.M. E.g. sigma1^2 in 
   #Lemma 3.1 has tau.M factored out, suggesting there is no difference between tau.M of group A and tau.M of group B.
   #As of the similarity in notation with beta_j^M, it could be the variance of beta_hat under the null hypothesis.
-  pvals<-SNTN_CDF(z=beta_carve_D,
+  
+  pvals<-1-SNTN_CDF(z=beta_carve_D,
            mu1=rep(0,length(beta_carve_D)),
            tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
            mu2=rep(0,length(beta_carve_D)),
@@ -214,9 +221,18 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
            c1=c1,
            c2=c2)
 
-  
-  return(pvals)
-  
+
+  # return(list(dim=length(beta_carve_D),
+  #             p=pvals,
+  #             chosen=chosen,
+  #             sigma.1 = sigma.1,
+  #             sigma.2 = sigma.2,
+  #             w = w,
+  #             delta = delta,
+  #             tau.M=tau.M,
+  #             beta=beta_carve_D,
+  #             rho=rho))
+  # 
   #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
   #It seems to me, that my sntn_cdf would deliver different results for these quantities, see e.g. sigma2 <- tau2 in sntn_cdf, 
   #wheras sigma.2 in the lines above takes into account the whole variance of beta_posi. A general seperate function needs a 
@@ -224,61 +240,11 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
 
   # pvals <- 1 - SNTN_CDF(beta_carve_D, ...)
   
+  return(list(pvals = pvals,split = split, beta = beta, lambda = lambda))
+  
 }
 
 
 #Paul trying to calculate the distribution of beta^Carve explicitly:
 #(See pvals above to see how the output is created)
-Res<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
-
-
-
-### Theoretical notes:
-
-#I asked Filip on Friday how you actually compute things when you only want to condition on one sign pattern.
-#Lee makes this clear on p. 15:
-#"Conditioning on the signs means that we only have to compute the interval [V−s (z), V+s (z)]
-#for the sign pattern s that was actually observed."
-
-#We see right under Theorem 5.3 in Lee, that V-s(z) and V+s(z) are defined through
-# A=As and b=bs
-#And s influences the definitions of A1(M,s) and b1(M,s) respectively.
-
-#Since s is in {-1,1}^|M|, it's only defined for variables that are actually selected, so
-#the computation of the signs is straightforward (I mention this, because we had some confusion
-#with a similar thing in another paper where we had s in [-1,1]^|M| or sth like this )
-
-
-#Question: Which beta^hat are we actually using though to get the signs?
-#A priori all of beta^carve, beta^POSI and beta^SPLIT seem at least viable
-
-#Thinking about it, I guess that since we are talking about M (i.e. M_A) all the time, it is probably 
-#beta^Split, which is also the beta we are working with in the code above. In fact, Filip already 
-#implemented it exactly like that above.
-
-
-#Question: If we only have eta in R^nx1 for a single polyhedron and eta_M in R^nx|M| for the union of polyhedra:
-#What eta_M do we actually use now when we additionally condition on the signs, to only have one polyhedron?
-
-
-#Questions for Christoph:
-#When normalizing the data at the beginning, we did it with the estimator of the standard deviation,
-#which divides by n instead of n-1, because Prof. Bühlmann did it like this in his lecture.
-#Is this correct and does it have any consequences in the following? Maybe incompatibility with other packages,
-#use a different estimator?
-#I'm guessing that it shouldn't be an issue because the whole columns are still the same
-#up to multiplicity regardless of the method
-
-
-#Regarding n_A /n_B: 
-#On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bigger group) and that
-#beta^Carve=w_A*beta^Split + w_B*beta^Posi
-#But in Lemma 3.2 on p. 4 he writes: n_B*beta^split in the definition of beta_j
-
-#Regarding vlo/vup:
-#When calculating the truncation limits vlo and vup, we tried to do it similarly to what Drysdale does in his code. Mainly, we
-#take a normalized row of the moore penrose inverse of x.Ma together with the sign of beta_split as the direction eta, calculate
-#vlo and vup as proposed in Lee et al., but then at the end we rescale vlo and vup as well as the variance of the TN distribution
-#by the length of the directions we considered. Why is the rescaling necessary and why is it nowhere mentioned?
-
-#As of now, we get sntn_cdf values of 1, mainly due to very high mean_delta and mean_w values. Normalizing the data did not resolve this.
+carve_D<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)

@@ -220,19 +220,6 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
            b=vup,
            c1=c1,
            c2=c2)
-
-
-  # return(list(dim=length(beta_carve_D),
-  #             p=pvals,
-  #             chosen=chosen,
-  #             sigma.1 = sigma.1,
-  #             sigma.2 = sigma.2,
-  #             w = w,
-  #             delta = delta,
-  #             tau.M=tau.M,
-  #             beta=beta_carve_D,
-  #             rho=rho))
-  # 
   #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
   #It seems to me, that my sntn_cdf would deliver different results for these quantities, see e.g. sigma2 <- tau2 in sntn_cdf, 
   #wheras sigma.2 in the lines above takes into account the whole variance of beta_posi. A general seperate function needs a 

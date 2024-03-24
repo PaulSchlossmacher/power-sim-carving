@@ -13,7 +13,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   
   #Normalize x and y before starting:
   y<-y-mean(y)
-  
+
   for (j in dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
@@ -86,13 +86,9 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   
   A <- rbind(A.0, A.1)# (2p-s) x n.a
   b <- rbind(b.0,b.1)
+  
   #c <- Sigma %*% t(x.Ma.i) %*% solve(x.Ma.i %*% Sigma %*% t(x.Ma.i))
   #z <- (diag(n.a) - c %*% x.Ma.i) %*% y.a
-  
-  #TODO: Need to handle these if empty, set to inf or -inf respectively
-  # ind.vup <- (A %*% c > 0)
-  # ind.vlo <- (A %*% c < 0)
-  
   #TODO:There's an error here, as the dimensions do not match. I think we have overseen that A%*%c is a matrix, hence division is ambiguous.
   #Drysdale solves this issue over a for loop in inference_on_screened inside _lasso.py. There he does it row by row of eta.T.
   #If i am not mistaken, then v_i is a column of c (equation 5.3 in Lee et al.) i am just not sure why he uses the signs of beta_hat in this equation, 
@@ -200,16 +196,25 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   #tau2 - not sure whether those will work as well (we are not considering yet that we only want those
   #instead of the whole matrix)
   
-  
+  #Filip inserted diag to tau1 and tau2, as all the rest information in the matrix is not used, and the SNTN_distribution handles
+  #vectors well, but the for loop would have to be adapted to work for a matrix rho, which is not necessary I think.
+  #Furthermore i switched the values of tau1 and tau2, as in lemma 3.2 sigma2 = tau_M^2*(t(X.Ma)%*%x.Ma)^-1, which corresponds to 
+  #Lemma 3.1: sigma2 = tau2^2. Not sure if Paul found it somewhere differently. This still gives cdf_values of 1....
+  #Food for thought: should tau.M in the assignment of tau2 be chosen as eta_var, the scaled variance we get from the norm of the directions eta?
+  #Or add it as additional question for Christoph, as we are still not exactly sure about the nature of tau.M. E.g. sigma1^2 in 
+  #Lemma 3.1 has tau.M factored out, suggesting there is no difference between tau.M of group A and tau.M of group B.
+  #As of the similarity in notation with beta_j^M, it could be the variance of beta_hat under the null hypothesis.
   pvals<-SNTN_CDF(z=beta_carve_D,
            mu1=rep(0,length(beta_carve_D)),
-           tau1=tau.M*solve(t(x.Ma)%*%x.Ma),
+           tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
            mu2=rep(0,length(beta_carve_D)),
-           tau2=tau.M*solve(t(x.Mb)%*%x.Mb),
+           tau2=diag(tau.M*solve(t(x.Ma)%*%x.Ma)),
            a=vlo,
            b=vup,
-           c1=c1, 
+           c1=c1,
            c2=c2)
+
+  
   return(pvals)
   
   #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
@@ -269,3 +274,11 @@ Res<-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 #On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bigger group) and that
 #beta^Carve=w_A*beta^Split + w_B*beta^Posi
 #But in Lemma 3.2 on p. 4 he writes: n_B*beta^split in the definition of beta_j
+
+#Regarding vlo/vup:
+#When calculating the truncation limits vlo and vup, we tried to do it similarly to what Drysdale does in his code. Mainly, we
+#take a normalized row of the moore penrose inverse of x.Ma together with the sign of beta_split as the direction eta, calculate
+#vlo and vup as proposed in Lee et al., but then at the end we rescale vlo and vup as well as the variance of the TN distribution
+#by the length of the directions we considered. Why is the rescaling necessary and why is it nowhere mentioned?
+
+#As of now, we get sntn_cdf values of 1, mainly due to very high mean_delta and mean_w values. Normalizing the data did not resolve this.

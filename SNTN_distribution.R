@@ -5,7 +5,8 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   #vector of cdf values for each entry of z
   s <- length(z)
   theta1 <- c1 * mu1 + c2 * mu2
-  sigma1 <- (c1)^2 * (tau1)^2 + (c2)^2 * (tau2)^2
+  #Attention here Filip wrote (tau1)^2 and (tau2)^2, but they are already passed as squares to the function
+  sigma1 <- (c1)^2 * tau1 + (c2)^2 * tau2
   r.sigma1 <- sqrt(sigma1)
   theta2 <- mu2
   sigma2 <- tau2
@@ -33,6 +34,7 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
     bn_cdf_w <- pmvnorm(lower = c(-Inf, -Inf), upper = mean_w, mean = c(0,0), sigma = cov_matrix,keepAttr = FALSE)
     n_cdf_delta <- pnorm(delta[i])
     n_cdf_w <- pnorm(w[i])
+    #TODO: Need to handle division by zero, on some runs i get all bn_cdfs and n_cdfs to be 1, which yields Nan values for sntn_cdf
     sntn_cdf <- (bn_cdf_delta - bn_cdf_w)/(n_cdf_delta - n_cdf_w)
     sntn_cdf_arr[i] <- sntn_cdf
   }

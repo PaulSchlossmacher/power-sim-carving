@@ -17,7 +17,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
   for (j in dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
-    sigma_j<-sum((x[,j]-xjbar)^2)/length(a)
+    sigma_j<-sum((x[,j]-xjbar)^2)/length(x[,j])
     for (i in dim(x)[1]){
       x[i,j]<-(x[i,j]-xjbar)/sigma_j
     }
@@ -215,7 +215,7 @@ carve.linear <- function(x, y, fraction = 0.9, FWER = TRUE, family = "gaussian",
            c2=c2)
 
   
-  return(pvals)
+  return(list(pvals = pvals,split = split, beta = beta, lambda = lambda))
   
   #REMARK: For my definition of sntn_cdf we dont need the explicit sigma.1,sigma.2, w, delta, rho, as they get calculated above.
   #It seems to me, that my sntn_cdf would deliver different results for these quantities, see e.g. sigma2 <- tau2 in sntn_cdf, 

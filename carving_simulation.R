@@ -59,11 +59,18 @@ args.lasso.inference <- list(sigma = sigma)
 #The goal is to make this work:
 carve_D <-carve.linear(x,y,fraq, args.lasso.inference = args.lasso.inference)
 #TODO
-#split <- carve_D$split
+split.select.list <- split.select(x,y,fraction = fraq)
+beta <- split.select.list$beta
+#beta <- beta[-1]#exclude intercept for now
+lambda <- split.select.list$lambda
+split <- split.select.list$split
+# split <- carve_D$split
+# beta <- carve_D$beta
+# lambda <- carve_D$lambda
 
 #I get some warnings for hamiltonian sampler, should compute carve_C under the same split as carve_D in selected viewpoint
 carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta, tol.beta = 0, sigma = sigma,
-                             lambda = lambda, intercept = TRUE,selected=TRUE, verbose = TRUE)
+                             lambda = lambda, intercept = FALSE,selected=TRUE, verbose = TRUE)
 
 
 #should maybe use the tools from this page somehow to obtain v_lo and v_up, 

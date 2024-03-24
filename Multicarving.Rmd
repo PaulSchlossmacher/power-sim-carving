@@ -9,6 +9,31 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Questions for Christoph:
+### Choice of variance estimator for normalizing
+When normalizing the data at the beginning, we did it with the estimator of the standard deviation, which divides by n instead of n-1, because Prof. Bühlmann did it like this in his lecture.
+Is this correct and does it have any consequences in the following? Maybe incompatibility with other packages, which use a different estimator?
+I'm guessing that it shouldn't be an issue because the whole columns are still the same
+up to multiplicity regardless of the method, but I'm not sure.
+
+
+### Regarding \(n_A /n_B:\) 
+On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bigger group) and that
+$$\hat\beta^{Carve}=w_A*\hat\beta^{Split} + w_B*\hat\beta^{Posi}$$
+But in Lemma 3.2 on p. 4 he writes in the definition of $\hat \beta_j$:
+$$n_B*\eta^T_{B, M_j}y_B$$
+So here it seems like in fact the coefficient $\beta^{Split}_j=\eta^T_{B, M_j}y_B$ gets multiplied with the smaller set of the split, i.e. group B.
+
+
+### Regarding the choice of \(\tau_M^2\) in Lemma 3.2
+In Lemma 3.2 Drysdale implements $\sigma_1^2$ with one $\tau_M^2$ for both the POSI and the SPLIT part. In our implementation we chose $\tau_M^2=\sigma^2$ with $\sigma^2$ assumed to be known and $y\sim N(X\beta^0, \sigma^2I_n)$. However in his code of _lasso.py on row 302, Drysdale uses two different $\tau$ for POSI and SPLIT: $\tau_M$ for $\tau_1$ (for the distribution of $\beta^{SPLIT}$), but uses some scaled version for $\tau_2$ (for the truncated distribution of $\beta^{POSI}$). The choice of this scaling is unclear to us.
+
+
+
+### Regarding \(V^{-(z)} /V^{+(z)}\):
+When calculating the truncation limits $V^-(z)$ and $V^+(z)$, we tried to do it similarly to what Drysdale does in his code.
+Namely, we take a normalized row of the Moore Penrose Inverse of $X_{M_A}$ together with the sign of $\hat\beta$ as the direction $\eta$, calculate $V^-(z)$ and $V^+(z)$ as proposed in Lee et al., but then at the end we rescale $V^-(z)$ and $V^+(z)$ by the length of the directions we considered. Why is the rescaling necessary and why is it mentioned nowhere in the papers?
+
 
 # Theoretical notes:
 
@@ -35,31 +60,11 @@ Question: If we only have eta in R^nx1 for a single polyhedron and eta_M in R^nx
 What eta_M do we actually use now when we additionally condition on the signs, to only have one polyhedron?
 
 
-### Definition of $m_j(x)$ in Lemma 3.1
+### Definition of \(m_j(x)\) in Lemma 3.1
 Drysdale writes $m_j(x)=(x-\theta_x)/\sigma_x$. Since $\theta_x, \sigma_x$ aren't defined, I guess he means:
 $$m_j(x)=(x-\theta_j)/\sigma_j$$
 
 
-## Questions for Christoph:
-### Choice of variance estimator for normalizing
-When normalizing the data at the beginning, we did it with the estimator of the standard deviation, which divides by n instead of n-1, because Prof. Bühlmann did it like this in his lecture.
-Is this correct and does it have any consequences in the following? Maybe incompatibility with other packages, use a different estimator?
-I'm guessing that it shouldn't be an issue because the whole columns are still the same
-up to multiplicity regardless of the method
-
-
-### Regarding n_A /n_B: 
-On p. 3, Drysdale writes that the group A gets used for screening (i.e is the bigger group) and that
-$$\hat\beta^{Carve}=w_A*\hat\beta^{Split} + w_B*\hat\beta^{Posi}$$
-But in Lemma 3.2 on p. 4 he writes in the definition of $\hat \beta_j$:
-$$n_B*\beta^{split} \ldots$$
-### Regarding the choice of tau_m^2 in Lemma 3.2
-In Lemma 3.2 Drysdale implements $\sigma_1^2$ with one $\tau_M^2$ for both the POSI and the SPLIT part. In our implementation we chose $\tau_M^2=\sigma^2$ with $\sigma^2$ assumed to be known and $y\sim N(X\beta^0, \sigma^2I_n)$. However in his code of _lasso.py on row 302, Drysdale uses two different $\tau$ for POSI and SPLIT: $\tau_M$ for $\tau_1$ (for the distribution of $\beta^{SPLIT}$), but uses some scaled version for $\tau_2$ (for the truncated distribution of $\beta^{POSI}$). The choice of this scaling is unclear to us.
-
-
-
-### Regarding vlo/vup:
-When calculating the truncation limits vlo and vup, we tried to do it similarly to what Drysdale does in his code. Mainly, we take a normalized row of the moore penrose inverse of x.Ma together with the sign of beta_split as the direction eta, calculate vlo and vup as proposed in Lee et al., but then at the end we rescale vlo and vup as well as the variance of the TN distribution by the length of the directions we considered. Why is the rescaling necessary and why is it nowhere mentioned?
 
 
 # Changes Made
@@ -82,6 +87,7 @@ When calculating the truncation limits vlo and vup, we tried to do it similarly 
 ** Remedy: Since in this case even in theory, i.e. without computational approximation to 1, $\Phi(\delta)-\Phi(\omega)$ would be very small, as a consequence the whole of F would be very big, i.e (almost) equal to 1. Therefore: We implemented an if clause that sets F(z) to 1, if $\Phi(\delta)=\Phi(\omega)$
 ** However: In these cases it also tends to be that the numerator = 0, i.e $B_{\rho}(m_1(z), \delta)=B_{\rho}(m_1(z), \omega)$ because of the same reasons as above. Since we don't know which one of numerator and denominator is actually bigger in this case, we set the probability to 0 by hand, which results in the p-value being set to 1. While this is unsatisfactory, it is the more conservative decision.
 ** Up for discussion: Maybe leaving it as NA would actually be the best decision?
+
 
 
 

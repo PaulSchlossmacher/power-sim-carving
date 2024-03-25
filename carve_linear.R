@@ -3,7 +3,7 @@
 set.seed(42)
 #Set the seed to have replicabiltiy while debugging
 
-carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = TRUE),
+carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = FALSE),
                          sigma=sigma){
   
   #Normalize x and y before starting:

@@ -327,7 +327,7 @@ multi.carve <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B
     
     
     list(pvals = pvals.v, sel.models = sel.models, 
-         split = split)
+         split = split, beta = beta, lambda = lambda)
   }
   inf.out <- if (parallel) {
     stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
@@ -392,6 +392,12 @@ multi.carve <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B
   } else {
     pvals <- myExtract("pvals")
     colnames(pvals) <- colnames(x)
+    #Filip inserted this
+    beta <- myExtract("beta")
+    #colnames(beta) <- colnames(x)
+    lambda <- myExtract("lambda")
+    split <- myExtract("split")
+    
     if (return.selmodels) {
       sel.models <- myExtract("sel.models")
       colnames(sel.models) <- colnames(x)
@@ -412,11 +418,12 @@ multi.carve <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B
     if (!return.nonaggr) 
       pvals <- NA
     if (return.selmodels) {
-      keep <- c("return.selmodels", "x", "y", "gamma", "inf.out", 
+      keep <- c("return.selmodels", "x", "y","beta","lambda","split", "gamma", "inf.out", 
                 "pvals", "pvals.current", "which.gamma", "sel.models", "FWER")
       rm(list = setdiff(names(environment()), keep))
     }
-    structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma],
+    #Filip inserted here beta,lambda and split
+    structure(list(pval.corr = pvals.current,beta = beta,lambda = lambda,split = split, gamma.min = gamma[which.gamma],
                    pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
                    method = "multi.carve", call = match.call()), class = "carve")
   }

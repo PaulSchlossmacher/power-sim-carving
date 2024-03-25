@@ -89,7 +89,21 @@ $$m_j(x)=(x-\theta_j)/\sigma_j$$
 ** Up for discussion: Maybe leaving it as NA would actually be the best decision?
 
 
+## Paul Monday, 25th March:
 
+* Started running the simulation studies as discussed with Filip yesterday in the file called "Power Studies Toeplitz". I used a Toeplitz design again, but with lower noise and more active variables ($s_0=15$)
+
+* We saw immediately that under the "right" conditions, $\hat \beta^{Drysdale}_{Carve}$ has the anticipated issue of not being able to compute $\beta^{Split}$ due to rank issues.
+
+* Note: I only saw that the computation crashed, but I don't know with 100% certainty whether this actually was the issue. *TODO*: Implement STOP messages, which would confirm this.
+
+* I then went on to use a 60-40 split instead, on which $\beta^{Drysdale}_{Carve}$ could then be computed again - as well as the respective p-values. I also calculated the p-values for Christophs carving function.
+
+* Then I started creating a "Confusion matrix" for Type I & II error. So far I've only done this for Christophs $\hat\beta^{Carve}$ though.
+
+* *TODO*: Do the same for Drysdale as well - should be quite straightforward I think
+
+* *TODO*: If possible, maybe try running a simulation that does all of the above e.g. a 100 times to see some proper results as far as power is concerned. Note: Computing time might be an issue, since even running Christophs carve.lasso only once in this specific Toeplitz example with many active variables took about 1 minute.
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

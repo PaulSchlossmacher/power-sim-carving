@@ -106,18 +106,20 @@ carve_D$pvals
 #True Positives:
 #We first have to create a new vector of p-values in R^p, i.e. R^200, where all
 #variables that weren't selected get assigned a p-value of 1:
+#Filip: maybe better readability without for loop
 p_vals_comp_C<-rep(1,p)
-
-Counter=1
-for (i in 1:p){
-  if (beta_tmp[i]!=0){
-    p_vals_comp_C[i]<-p_vals_C[Counter]
-    Counter=Counter+1
-  }
-}
+chosen <- which(abs(beta_tmp)>0)
+p_vals_comp_C[chosen] <- p_vals_C
+# Counter=1
+# for (i in 1:p){
+#   if (beta_tmp[i]!=0){
+#     p_vals_comp_C[i]<-p_vals_C[Counter]
+#     Counter=Counter+1
+#   }
+# }
 #Upon first viewing this seems to work
 
-
+#Question to Paul: What happens here?
 prd<-ifelse(blabla>05., "Yes", "No")
 table(prd, d$response)
 

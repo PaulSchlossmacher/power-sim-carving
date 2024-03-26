@@ -54,6 +54,26 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
   x_Ma <- x.a[, -chosen]#(n.a x (p-s))
   x_Mb <- x.b[, -chosen]
   
+  #Check for well-definedness of moore penrose inverses, and hence also of beta_carve_D, checking if the rank of t(x.M)%*%x.M
+  #is such that it allows inversion
+  x.Ma.cross <- crossprod(x.Ma,x.Ma)#t(x.Ma)%*%x.Ma
+  x.Mb.cross <- crossprod(x.Mb,x.Mb)
+  x.Ma.cross.rank <- rankMatrix(x.Ma.cross)
+  x.Mb.cross.rank <- rankMatrix(x.Mb.cross)
+  if ((x.Ma.cross.rank < s) && (x.Mb.cross.rank < s)){
+    cat("the dimension of t(x.Ma)%*%x.Ma is ", dim(x.Ma.cross)[1], "x",dim(x.Ma.cross)[2], "but the rank of it is ", x.Ma.cross.rank, "\n")
+    cat("the dimension of t(x.Mb)%*%x.Mb is ", dim(x.Mb.cross)[1], "x",dim(x.Mb.cross)[2], "but the rank of it is ", x.Mb.cross.rank, "\n")
+    stop("Both t(x.Ma)%*%X.Ma and t(x.Mb)%*%X.Mb are not invertible")
+  }
+  if (x.Ma.cross.rank < s){
+    cat("the dimension of t(x.Ma)%*%x.Ma is ", dim(x.Ma.cross)[1], "x",dim(x.Ma.cross)[2], "but the rank of it is ", x.Ma.cross.rank, "\n")
+    stop("t(x.Ma)%*%X.Ma) is not invertible")
+  }
+  if (x.Mb.cross.rank < s){
+    cat("the dimension of t(x.Mb)%*%x.Mb is ", dim(x.Mb.cross)[1], "x",dim(x.Mb.cross)[2], "but the rank of it is ", x.Mb.cross.rank, "\n")
+    stop("t(x.Mb)%*%X.Mb) is not invertible")
+  }
+  
   
   #compute the moore penrose inverse of active variables in both splits
   x.Ma.i <- ginv(x.Ma)#(s x na)

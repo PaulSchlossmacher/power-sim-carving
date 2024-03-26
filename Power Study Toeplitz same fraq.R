@@ -60,7 +60,7 @@ y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
 
-nsim <- 50
+nsim <- 30
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
@@ -85,6 +85,7 @@ for (fraq_ind in 1:f){
   
   
   for (i in 1:nsim){
+    print(i)
     #get different selection events
     select.again <- TRUE
     select.again.counter = 0
@@ -98,6 +99,10 @@ for (fraq_ind in 1:f){
       y <- y.true + sigma * rnorm(n)
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
+      if(sum(beta_tmp!=0)==0){
+        select.again <- TRUE
+        print("0 variables where chosen by the lasso, repeating selection")
+      }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
       if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){

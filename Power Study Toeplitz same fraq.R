@@ -29,6 +29,7 @@ library(parallel)
 library(doRNG)
 library(truncnorm)
 library(git2r)
+library(ggplot2)
 
 
 source(hdi_adjustments_path)
@@ -192,7 +193,44 @@ for (fraq_ind in 1:f){
   drysdale.fails[fraq_ind] <- counter - nsim
 }
 #TODO:implement drysdale failed select counter on all fraq
-save.image(file='myEnvironment.RData')
+#save.image(file='myEnvironment.RData')
 #load('myEnvironment.RData')
 
-#Maybe we should try running a simulation that does all of the above for example a 100 times?
+
+
+# --------------- Create plots --------------
+
+data_Power <- data.frame(
+  Fraq=fraq.vec,
+  "Avg Power Christoph" = full_power_avg_C,
+  "Avg Power Drysdale" = full_power_avg_D
+)
+
+data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+
+PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+  geom_line() +
+  labs(title = "Average Power",
+       x = "Fraq", y = "Value") +
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+       units = "in", dpi = 300, bg = "#F0F0F0")
+
+
+data_TypeI <- data.frame(
+  Fraq=fraq.vec,
+  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
+  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
+)
+
+data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+
+TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
+  geom_line() +
+  labs(title = "Average Type I Error Rate",
+       x = "Fraq", y = "Value") +
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
+       units = "in", dpi = 300, bg = "#F0F0F0")

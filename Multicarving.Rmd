@@ -35,6 +35,11 @@ In Lemma 3.2 Drysdale implements $\sigma_1^2$ with one $\tau_M^2$ for both the P
 When calculating the truncation limits $V^-(z)$ and $V^+(z)$, we tried to do it similarly to what Drysdale does in his code.
 Namely, we take a normalized row of the Moore Penrose Inverse of $X_{M_A}$ together with the sign of $\hat\beta$ as the direction $\eta$, calculate $V^-(z)$ and $V^+(z)$ as proposed in Lee et al., but then at the end we rescale $V^-(z)$ and $V^+(z)$ by the length of the directions we considered. Why is the rescaling necessary and why is it mentioned nowhere in the papers?
 
+### Set.seed()
+Is our practice for setting seeds in the while loops in the simulation files ok? The function still is a bit of a mystery to both us.
+
+### Constant fraq
+Would it be "fair" to compare Drysdale's p-values with Christoph's p-values, when having them at different fractions (i.e split-rates) to ensure Drysdale's $\hat \beta^{Carve}$ to exist?
 
 # Theoretical notes:
 
@@ -121,6 +126,10 @@ Seed 41 and fraq 0.9 gives a singular matrix error for carve.linear, at this see
 * carve.linear works perfectly fine when not executing the split and carve.lasso in "Power Study Toeplitz" first. This behaviour seems very weird
 * For the first possible comparison of the p_vals_C and p_vals_D it worked to set a different seed before calling carve.linear. This solution is temporary and still needs more investigation
 * TODO: We can discuss if it would help to perform the selection only once inside of "Power Study Toeplitz" and adapt carve.linear to get the selection informations passed as arguments as it is in carve.lasso. This seems to be the cleanest solution and gives the most fair comparison. I already did something like that in the branch "Filip fights whitening errors".
+
+## Paul Tuesday, 26th March:
+* Created the plots, which show the the simulations that Filip implemented.
+
 
 
 # Further literature

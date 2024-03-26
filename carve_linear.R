@@ -3,7 +3,7 @@
 #set.seed(42)
 #Set the seed to have replicabiltiy while debugging
 
-carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = FALSE),
+carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.selector = list(intercept = FALSE),
                          sigma=sigma){
   #set.seed(42)
   #Normalize x and y before starting:
@@ -16,13 +16,7 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
       x[i,j]<-(x[i,j]-xjbar)/sigma_j
     }
   }
-  #1-split-select from Christoph's carve.Lasso:
-  #Splits data and selects active variables while checking constraints.
-  split.select.list <- split.select(x,y,fraction = fraction)
-  beta <- split.select.list$beta
-  #beta <- beta[-1] #exclude intercept for now
-  lambda <- split.select.list$lambda
-  split <- split.select.list$split
+  
   n <- length(y)
   p <- length(beta)
   n.a <- length(split)
@@ -158,18 +152,19 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
   beta.M=rep(0,s)  
 
 
-  pvals<-1-SNTN_CDF(z=beta_carve_D,
-           mu1=theta.1,
-           tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
-           mu2=theta.2,
-           tau2=diag(tau.M*solve(t(x.Ma)%*%x.Ma)),
-           a=vlo,
-           b=vup,
-           c1=c1,
-           c2=c2)
+  pv<-1-SNTN_CDF(z=beta_carve_D,
+                 mu1=theta.1,
+                 tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
+                 mu2=theta.2,
+                 tau2=diag(tau.M*solve(t(x.Ma)%*%x.Ma)),
+                 a=vlo,
+                 b=vup,
+                 c1=c1,
+                 c2=c2)
+  pvals <- rep(1,p)
+  pvals[chosen] <- pv
   
-  
-  return(list(pvals = pvals,split = split, beta = beta, lambda = lambda))
+  return(pvals)
 }
 
 

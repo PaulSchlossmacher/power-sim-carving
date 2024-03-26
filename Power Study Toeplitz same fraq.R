@@ -57,7 +57,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-y <- y.true + sigma * rnorm(n)
+
 
 # Tried normal glmnet Lasso just to see whether screening works on the full sample:
 # It does.
@@ -65,13 +65,16 @@ y <- y.true + sigma * rnorm(n)
 # plot(cv_model)
 # coef(cv_model)
 
-
-H0T_Rej_D_total <- 0
-H0F_Rej_D_total <- 0
-H0T_N_Rej_D_total <- 0
-H0F_N_Rej_D_total <- 0
+test_res_D <- rep(0,4)
+test_res_C <- rep(0,4)
 counter <- 1
 nsim <- 3
+powers_D <- rep(0,nsim)
+powers_C <- rep(0,nsim)
+type1_error_D <- rep(0,nsim)
+type1_error_C <- rep(0,nsim)
+
+
 for (i in 1:nsim){
   #get different selection events
   select.again <- TRUE
@@ -82,6 +85,7 @@ for (i in 1:nsim){
     select.again <- FALSE
     set.seed(counter)
     counter <- counter + 1
+    y <- y.true + sigma * rnorm(n)
     split.select.list <- split.select(x,y,fraction = fraq)
     beta_tmp <- split.select.list$beta
     lambda <- split.select.list$lambda
@@ -91,6 +95,7 @@ for (i in 1:nsim){
       print("Need to split again because we selected more variables than beta_D can handle")
     }
   }
+  
   print("calculating Drysdales p-values")
   p_vals_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)
   
@@ -144,27 +149,50 @@ for (i in 1:nsim){
     byrow = TRUE,
     dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
   )
-  H0T_Rej_D_total <- H0T_Rej_D_total + H0T_Rej_D
-  H0F_Rej_D_total <- H0F_Rej_D_total + H0F_Rej_D
-  H0T_N_Rej_D_total <- H0T_N_Rej_D_total + H0T_N_Rej_D
-  H0F_N_Rej_D_total <- H0F_N_Rej_D_total + H0F_N_Rej_D
+  test_res_D<-test_res_D + c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
+  test_res_C<- test_res_C + c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
   
-  print(Testing_table_C)
+  powers_D[i] <- H0F_Rej_D/(length(sel.index))
+  powers_C[i] <- H0F_Rej_C/(length(sel.index))
+  type1_error_D[i] <- H0T_Rej_D/(p-length(sel.index))
+  type1_error_C[i] <- H0T_Rej_C/(p-length(sel.index))
+  
+  
+  
   print(Testing_table_D)
+  print(Testing_table_C)
 }
 
-H0T_Rej_D_avg <- H0T_Rej_D_total / nsim
-H0F_Rej_D_avg <- H0F_Rej_D_total / nsim
-H0T_N_Rej_D_avg <- H0T_N_Rej_D_total / nsim
-H0F_N_Rej_D_avg <- H0F_N_Rej_D_total / nsim
+test_res_D_avg <- test_res_D/nsim
+test_res_C_avg <- test_res_C/nsim
+
+power_avg_D <- mean(powers_D)
+power_avg_C <- mean(powers_C)
+type1_error_avg_D <- mean(type1_error_D)
+type1_error_avg_C <- mean(type1_error_C)
 
 Testing_table_D_avg <- matrix(
-  c(H0T_Rej_D_avg, H0F_Rej_D_avg, H0T_N_Rej_D_avg, H0F_N_Rej_D_avg),
+  test_res_D_avg,
   nrow = 2,
   byrow = TRUE,
   dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
 )
 
+Testing_table_C_avg <- matrix(
+  test_res_C_avg,
+  nrow = 2,
+  byrow = TRUE,
+  dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+)
+cat("The average confusion matrix of Drydales p-values over ", nsim, "calculations is: \n" )
 print(Testing_table_D_avg)
+cat("The average confusion matrix of Christoph's p-values over ", nsim, "calculations is: \n" )
+print(Testing_table_C_avg)
+
+cat("The average power of Drysdales p-values:", power_avg_D)
+cat("The average power of Christophs p-values:", power_avg_C)
+cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D)
+cat("The average type 1 error of Christophs p-values:", type1_error_avg_C)
+
 
 #Maybe we should try running a simulation that does all of the above for example a 100 times?

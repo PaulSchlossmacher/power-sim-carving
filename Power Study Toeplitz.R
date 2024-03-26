@@ -44,7 +44,7 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-fraq = 0.9
+fraq = 0.6
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -67,7 +67,7 @@ y <- y.true + sigma * rnorm(n)
 
 
 #Here we run the simulation with beta_Carve^Drysdale
-carve_D <-carve.linear(x,y,fraq,sigma=sigma)
+#carve_D <-carve.linear(x,y,fraq,sigma=sigma)
 
 #We get an error 
 
@@ -97,7 +97,12 @@ sum(beta_tmp!=0)
 #We have 37 non-0 beta coefficients. So let's go for a 60-40 split instead of 90-10 before:
 
 carve_D <-carve.linear(x,y,fraction=0.6,sigma=sigma)
-carve_D$pvals
+beta_tmp2 <- carve_D$beta
+p_vals_D <- carve_D$pvals
+p_vals_comp_D <- rep(1,p)
+chosen_D <- which(abs(beta_tmp2)>0)
+p_vals_comp_D[chosen_D] <- p_vals_D
+
 
 #Now we don't get an error anymore and we can calculate the p-values:
 
@@ -108,8 +113,8 @@ carve_D$pvals
 #variables that weren't selected get assigned a p-value of 1:
 #Filip: maybe better readability without for loop
 p_vals_comp_C<-rep(1,p)
-chosen <- which(abs(beta_tmp)>0)
-p_vals_comp_C[chosen] <- p_vals_C
+chosen_C <- which(abs(beta_tmp)>0)
+p_vals_comp_C[chosen_C] <- p_vals_C
 # Counter=1
 # for (i in 1:p){
 #   if (beta_tmp[i]!=0){
@@ -120,21 +125,21 @@ p_vals_comp_C[chosen] <- p_vals_C
 #Upon first viewing this seems to work
 
 #Question to Paul: What happens here?
-prd<-ifelse(blabla>05., "Yes", "No")
-table(prd, d$response)
+#prd<-ifelse(blabla>05., "Yes", "No")
+#table(prd, d$response)
 
 #Do it with level of significance 0.05, but maybe sth else is smarter?
 #Multiple testing issue?
 
-H0T_Rej<-sum(p_vals_comp_C<=0.05 & beta==0)
-H0F_Rej<-sum(p_vals_comp_C<=0.05 & beta==1)
-H0T_N_Rej<-sum(p_vals_comp_C>0.05 & beta==0)
-H0F_N_Rej<-sum(p_vals_comp_C>0.05 & beta==1)
+H0T_Rej_C<-sum(p_vals_comp_C<=0.05 & beta==0)
+H0F_Rej_C<-sum(p_vals_comp_C<=0.05 & beta==1)
+H0T_N_Rej_C<-sum(p_vals_comp_C>0.05 & beta==0)
+H0F_N_Rej_C<-sum(p_vals_comp_C>0.05 & beta==1)
 
 
 
 Testing_table_C <- matrix(
-  c(H0T_Rej, H0F_Rej, H0T_N_Rej, H0F_N_Rej),
+  c(H0T_Rej_C, H0F_Rej_C, H0T_N_Rej_C, H0F_N_Rej_C),
   nrow = 2,
   byrow = TRUE,
   dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
@@ -147,4 +152,21 @@ print(Testing_table_C)
 
 #Those are Christophs results, what's left is to do the same for Drysdale.
 #Also this is of course a very small sample size for comparison and "power studies"
+#Following Pauls procedure, here is the same for Drysdales beta_carve
+H0T_Rej_D<-sum(p_vals_comp_D<=0.05 & beta==0)
+H0F_Rej_D<-sum(p_vals_comp_D<=0.05 & beta==1)
+H0T_N_Rej_D<-sum(p_vals_comp_D>0.05 & beta==0)
+H0F_N_Rej_D<-sum(p_vals_comp_D>0.05 & beta==1)
+
+
+
+Testing_table_D <- matrix(
+  c(H0T_Rej_D, H0F_Rej_D, H0T_N_Rej_D, H0F_N_Rej_D),
+  nrow = 2,
+  byrow = TRUE,
+  dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+)
+
+print(Testing_table_D)
+
 #Maybe we should try running a simulation that does all of the above for example a 100 times?

@@ -1,6 +1,6 @@
 #splits the data, performs selection on one split, calculates p-values of carving estimator as in Drydale's paper
 
-set.seed(42)
+#set.seed(42)
 #Set the seed to have replicabiltiy while debugging
 
 carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = FALSE),
@@ -48,7 +48,7 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
   
   #extract active variables from both splits
   x.Ma <- x.a[, chosen]#(n.a x s)
-  x.Mb <- x.b[, chosen]
+  x.Mb <- x.b[, chosen]#(n.b x s)
   
   #extract inactive variables from both splits
   x_Ma <- x.a[, -chosen]#(n.a x (p-s))
@@ -56,8 +56,8 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
   
   #Check for well-definedness of moore penrose inverses, and hence also of beta_carve_D, checking if the rank of t(x.M)%*%x.M
   #is such that it allows inversion
-  x.Ma.cross <- crossprod(x.Ma,x.Ma)#t(x.Ma)%*%x.Ma
-  x.Mb.cross <- crossprod(x.Mb,x.Mb)
+  x.Ma.cross <- crossprod(x.Ma,x.Ma)#t(x.Ma)%*%x.Ma, s x s
+  x.Mb.cross <- crossprod(x.Mb,x.Mb)#s x s
   x.Ma.cross.rank <- rankMatrix(x.Ma.cross)
   x.Mb.cross.rank <- rankMatrix(x.Mb.cross)
   if ((x.Ma.cross.rank < s) && (x.Mb.cross.rank < s)){

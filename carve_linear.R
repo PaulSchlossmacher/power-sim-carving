@@ -5,10 +5,9 @@
 
 carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(intercept = FALSE),
                          sigma=sigma){
-  
+  #set.seed(42)
   #Normalize x and y before starting:
   y<-y-mean(y)
-
   for (j in dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
@@ -17,7 +16,6 @@ carve.linear <- function(x, y, fraction = 0.9, args.model.selector = list(interc
       x[i,j]<-(x[i,j]-xjbar)/sigma_j
     }
   }
-  
   #1-split-select from Christoph's carve.Lasso:
   #Splits data and selects active variables while checking constraints.
   split.select.list <- split.select(x,y,fraction = fraction)

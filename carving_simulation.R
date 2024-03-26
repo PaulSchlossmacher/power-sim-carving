@@ -53,7 +53,7 @@ y <- y.true + sigma * rnorm(n)
 
 
 #Here we run the simulation with beta_Carve^Drysdale
-carve_D <-carve.linear(x,y,fraq,sigma=sigma)
+carve_D <-carve.linear(x,y,fraction = fraq,sigma=sigma)
 split <- carve_D$split
 beta_tmp <- carve_D$beta
 lambda <- carve_D$lambda

@@ -95,7 +95,7 @@ p_vals_C<-carve_C$pv
 sum(beta_tmp!=0)
 
 #We have 37 non-0 beta coefficients. So let's go for a 60-40 split instead of 90-10 before:
-
+set.seed(41)
 carve_D <-carve.linear(x,y,fraction=0.6,sigma=sigma)
 beta_tmp2 <- carve_D$beta
 p_vals_D <- carve_D$pvals

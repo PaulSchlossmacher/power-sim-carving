@@ -26,7 +26,7 @@ $$n_B*\eta^T_{B, M_j}y_B$$
 So here it seems like in fact the coefficient $\beta^{Split}_j=\eta^T_{B, M_j}y_B$ gets multiplied with the smaller set of the split, i.e. group B.
 
 
-### Regarding the choice of \(\tau_M^2\) in Lemma 3.2
+### Regarding the choice of $\tau_M^2$ in Lemma 3.2
 In Lemma 3.2 Drysdale implements $\sigma_1^2$ with one $\tau_M^2$ for both the POSI and the SPLIT part. In our implementation we chose $\tau_M^2=\sigma^2$ with $\sigma^2$ assumed to be known and $y\sim N(X\beta^0, \sigma^2I_n)$. However in his code of _lasso.py on row 302, Drysdale uses two different $\tau$ for POSI and SPLIT: $\tau_M$ for $\tau_1$ (for the distribution of $\beta^{SPLIT}$), but uses some scaled version for $\tau_2$ (for the truncated distribution of $\beta^{POSI}$). The choice of this scaling is unclear to us.
 
 
@@ -111,7 +111,17 @@ Started with some experiments around the robustness of our estimators. As carve.
 I checked also whether the choice of seed in the carving_simulation file propagates through to the functions and this is indeed the case. Furthermore, it was interesting to see that the selection events are not the same when comparing sel.models from carve_C and the chosen indices from our own split_select inside of carve.linear. This suggests that we still do not perform all constraint checks the same as it should be done for carve.lasso, which maybe explains the not fulfilled whitening constraints when calling carve.lasso on our own selection event. 
 So an idea would be to take the selection event imposed by multi.carve and use it on carve.linear.
 I adapted multi.carve to return beta and lambda from its selection event, as well as carve.linear to not perform its own selection, but get it as parameters as carve.lasso does. To match the dimension of pvalues from multi.carve I set carve.linear's output to have also length 200, with ones at all indices, which were already excluded from selection.
-Seed 41 and fraq 0.9 gives a singular matrix error for carve.linear, at this seed there are many selected variables, could be that we encounter here the problems mentioned by Christoph. 
+Seed 41 and fraq 0.9 gives a singular matrix error for carve.linear, at this seed there are many selected variables, could be that we encounter here the problems mentioned by Christoph.
+
+## Filip Tuesday, 26th March:
+* Implemented stop messages in carve.linear which appear if the moore penrose inverse is not well defined due to singularity of $X_{A,M_A}^TX_{A,M_A}$ or $X_{B,M_A}^TX_{B,M_A}$
+* Added confusion matrix example for Drysdales p-values in the style of what Paul did with Christophs p-values.
+* Had major problems with replicability of carve.linear. The two selection events are different when comparing the split.select output inside of "Power Study Toeplitz" and the split.select output from inside of carve.linear. To get similar results, the seed has to be set again inside of carve.linear, or maybe be passed as an argument for later automatization.
+* Tried setting the seed again before calling carve.linear, but this gives 0 selected variables from Lasso
+* carve.linear works perfectly fine when not executing the split and carve.lasso in "Power Study Toeplitz" first. This behaviour seems very weird
+* For the first possible comparison of the p_vals_C and p_vals_D it worked to set a different seed before calling carve.linear. This solution is temporary and still needs more investigation
+* TODO: We can discuss if it would help to perform the selection only once inside of "Power Study Toeplitz" and adapt carve.linear to get the selection informations passed as arguments as it is in carve.lasso. This seems to be the cleanest solution and gives the most fair comparison. I already did something like that in the branch "Filip fights whitening errors".
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

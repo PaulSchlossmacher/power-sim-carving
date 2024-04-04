@@ -127,8 +127,31 @@ Seed 41 and fraq 0.9 gives a singular matrix error for carve.linear, at this see
 * For the first possible comparison of the p_vals_C and p_vals_D it worked to set a different seed before calling carve.linear. This solution is temporary and still needs more investigation
 * TODO: We can discuss if it would help to perform the selection only once inside of "Power Study Toeplitz" and adapt carve.linear to get the selection informations passed as arguments as it is in carve.lasso. This seems to be the cleanest solution and gives the most fair comparison. I already did something like that in the branch "Filip fights whitening errors".
 
-## Paul Tuesday, 26th March:
-* Created the plots, which show the the simulations that Filip implemented.
+## Paul & Filip, 26th March evening
+Implemented Power study Toeplitz same fraq to perform data splitting and selection, followed by carve.lasso and carve.linear working on the same selected model. This procedure is done for each chosen fraction and averaged over nsim simulation rounds. To make this work, we had to grant Drysdales carve.linear estimator alot of privileges by performing model selection as many times as necessary for carve.linear to be well defined. This works fine up to fractions of around 0.7, whereas higher fractions lead to the selection procedure being repeated more than 50 times and thus stop the code execution. All of the simulation data is saved in vectors, such that we get for each fraction an average confusion matrix at the end. We also keep track of the power and the type I error, calculating them by
+
+\begin{align*}
+  \text{power} &= \frac{|\{\text{H}_0\text{ false and we rejected}\}|}{s}\\
+  &\\
+  \text{type I error} &= \frac{|\{\text{H}_0\text{ true and we rejected}\}|}{p-s}
+\end{align*}
+
+where s is the number of true active predictors and p the number of total predictors. These quantities are plotted against each other after the simulation has finished.
+During the simulation it happened sometimes that the model selection did select any predictors. In this case we forced the simulation to repeat the selection event.
+
+## Meeting Christoph Wednesday, 27th March
+* Regarding the choice of variance estimator for normalizing: it seems to not make any difference, as this scaling will just be absorbed into the choice of lambda during model selection.
+* Regarding $n_A /n_B$: this is a mistake in Drysdales paper.
+* Regarding the choice of $\tau_M^2$ in Lemma 3.2: It is ok for us to just set it to $\sigma^2$, but we can do more experiments on that as described below in the further steps.
+* Regarding $V^{-}(z)$ and $V^{+}(z)$: We should not mix our understanding with what Drysdale does. But it would still be interesting to compare his scaling approach when calculating $V^{-}(z)$ and $V^{+}(z)$ with the generic design from Lee's paper that avoids scaling.
+
+# Further steps
+* Perform an analysis on the distribution of the p-values obtained from the inactive variables after fitting carve.linear. If screening is given, they should follow a uniform distribution. We could compare their distribution even in the case when screening is not given and look how much they differ.
+* Once the p-value distribution comparison is set, we can play around with our calculation of $V^{-}(z)$ and $V^{+}(z)$, leaving out scaling for example, and compare the resulting distributions to see which one matches a uniform best. Here is also the point where we can try to take the scaled version of $\tau_M^2$ for the variance of the truncated normal distribution and look again how the distribution of p-values compares.
+* As of Paul's proposal, we can try to test how much improvements does carve.lasso give when used on higher fractions as carve.linear would allow.
+* The repetition of selection events in case of no selected active variables is disputable. Hence we could say that we count them too into our power and type I error vectors by just skipping this simulation round.
+* We could try to implement some kind of optional FWER control into carve.linear. For example through a Bonferroni correction
+* We could ask for permission to the D-MATH computation hardware and scale up our simulations for a more thorough comparison between carve.lasso and carve.linear
 
 
 

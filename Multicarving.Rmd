@@ -160,6 +160,8 @@ During the simulation it happened sometimes that the model selection did select 
 * As discussed we only collect p-values from the selected ones which are truly inactive
 * I created QQ-plots comparing the distribution of the p-values to the theoretical uniform distribution. An easier solution would be to just plot the empirical distribution of our p-values, which should already form a straight line if it is truly uniform(I didnt think of that straight away)
 * First i did plots for the carve_linear version that we used in our carve.lasso comparison and got the plots in figure 1. Next i tried to use the scaled variance eta_var, which is the one that drysdale used in his python code and got the plots in figure 2. These seem to be even worse.
+* Lastly I changed the calculation of the truncation limits in carve_linear to not perform normalization, as would be the natural solution following Lee's paper. This is pictured in figure 3. The resulting p-values appear to have a similar distribution as our initial implementation from figure 1. Additionally I plotted a histogram for this case, to get a better visualization of the distribution of the p-values.
+* Next steps: Maybe perform statistical tests for the hypothesis that we actually do not have uniform p-values as we should have. Other than that we would need to go again over the theory the check where our implementation of carve.linear went wrong. Just by looking at the QQ-plots it seems to be way off, but symmetric around the median with the median being the same as expected from a uniform distribution.
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample_size 1000"}
 knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
@@ -168,8 +170,6 @@ knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, where only the variance of the truncated normal distribution has a changed paramater from $\\tau_M = \\sigma^2$ to the scaled eta_var from Drysdale's Code. Both plots use sample_size 1000"}
 knitr::include_graphics("QQ_plots_carve_linear_with_eta_var(N=1000).png")
 ```
-
-* Lastly I changed the calculation of the truncation limits in carve_linear to not perform normalization, as would be the natural solution following Lee's paper. This is pictured in figure 3. The resulting p-values appear to have a similar distribution as our initial implementation from figure 1. Additionally I plotted a histogram for this case, to get a better visualization of the distribution of the p-values.
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed on p-values from carve.linear which did not normalize in the computation of the truncation limits. Both plots use sample_size 1000"}
 knitr::include_graphics("QQ_plots_without_normalization.png")

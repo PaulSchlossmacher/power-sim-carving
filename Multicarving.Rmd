@@ -153,8 +153,31 @@ During the simulation it happened sometimes that the model selection did select 
 * We could try to implement some kind of optional FWER control into carve.linear. For example through a Bonferroni correction
 * We could ask for permission to the D-MATH computation hardware and scale up our simulations for a more thorough comparison between carve.lasso and carve.linear
 
+## Filip, Wednesday April 4th
+* I created a new branch called Inspection of p-value distribution. In this branch is a new file p_vals_distribution
+* I used fraq = 0.7 and sigma = 1.9 which gave empirically a similar amount of successful screening as not successful screening
+* The simulation loop is still not optimized, as it runs as long as we have enough p-values under screening as well as without screening. We could have for example also just focused on one of them at a time. For example lowering the sigma and analysing p-values under screening followed by higher sigma and analysis of p-values without screening.
+* As discussed we only collect p-values from the selected ones which are truly inactive
+* I created QQ-plots comparing the distribution of the p-values to the theoretical uniform distribution. An easier solution would be to just plot the empirical distribution of our p-values, which should already form a straight line if it is truly uniform(I didnt think of that straight away)
+* First i did plots for the carve_linear version that we used in our carve.lasso comparison and got the plots in figure 1. Next i tried to use the scaled variance eta_var, which is the one that drysdale used in his python code and got the plots in figure 2. These seem to be even worse.
+* Lastly I changed the calculation of the truncation limits in carve_linear to not perform normalization, as would be the natural solution following Lee's paper. This is pictured in figure 3. The resulting p-values appear to have a similar distribution as our initial implementation from figure 1. Additionally I plotted a histogram for this case, to get a better visualization of the distribution of the p-values.
+* Next steps: Maybe perform statistical tests for the hypothesis that we actually do not have uniform p-values as we should have. Other than that we would need to go again over the theory the check where our implementation of carve.linear went wrong. Just by looking at the QQ-plots it seems to be way off, but symmetric around the median with the median being the same as expected from a uniform distribution.
 
+```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample_size 1000"}
+knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
+```
 
+```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, where only the variance of the truncated normal distribution has a changed paramater from $\\tau_M = \\sigma^2$ to the scaled eta_var from Drysdale's Code. Both plots use sample_size 1000"}
+knitr::include_graphics("QQ_plots_carve_linear_with_eta_var(N=1000).png")
+```
+
+```{r, echo=FALSE,fig.cap="QQ-plots performed on p-values from carve.linear which did not normalize in the computation of the truncation limits. Both plots use sample_size 1000"}
+knitr::include_graphics("QQ_plots_without_normalization.png")
+```
+
+```{r, echo=FALSE,fig.cap="Histogram of p-values under screening obtained from carve.linear without normalization of truncation limits."}
+knitr::include_graphics("histogram_without_normalization.png")
+```
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

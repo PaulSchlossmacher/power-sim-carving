@@ -59,7 +59,7 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma <- 1.9 #Variance 1.9 instead of 2 before, to make screening about as often successful as not
+sigma <- 1.2
 
 #nsim = 20
 counter <- 0
@@ -69,11 +69,11 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 200
+target_number <- 500
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
-while (p_val_screen_count < target_number || p_val_noscreen_count < target_number){
+while (p_val_screen_count < target_number){
   rounds <- rounds + 1
   #get different selection events
   select.again <- TRUE
@@ -104,63 +104,33 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     
   }
   
-  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)
+  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$pvals
   
   sel.index <- which(beta_tmp != 0)
   #check screening condition
   if (all(act.index %in% sel.index)){
-    if(p_val_screen_count > target_number){
-      next
-    }
-    screening <- c(screening, TRUE)
     p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     p_val_screen_count <- length(p_vals_screen)
+    screening <- c(screening, TRUE)
+    
   }
+  #if screening not successful skip the round
   else{
-    if(p_val_noscreen_count > target_number){
-      next
-    }
-    p_vals_noscreen <- c(p_vals_noscreen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     screening <- c(screening, FALSE)
-    p_val_noscreen_count <- length(p_vals_noscreen)
+    next
   }
-  print(min(p_val_screen_count,p_val_noscreen_count))
+  print(p_val_screen_count)
   
- }
+}
 cat("We had ", sum(screening), " successful screenings out of ", rounds, " simulations.")
 
-# par(mfrow = c(1, 2))
-# #Create empty plot to visualize 1dim distribution of p-values
-# plot(x = NULL, y = NULL, xlim = c(0, 1), ylim = c(0, 1), 
-#      main = "p-values under screening", xlab = "Values", ylab = "")
-# 
-# # Add points to the plot at a fixed y-coordinate
-# points(p_vals_screen, rep(0.5, length(p_vals_screen)), pch = 16, col = "skyblue", cex = 0.7)
-# 
-# plot(x = NULL, y = NULL, xlim = c(0, 1), ylim = c(0, 1), 
-#      main = "p-values without screening", xlab = "Values", ylab = "")
-# 
-# # Add points to the plot at a fixed y-coordinate
-# points(p_vals_noscreen, rep(0.5, length(p_vals_noscreen)), pch = 16, col = "skyblue", cex = 0.7)
-
-print(length(p_vals_screen))
-print(length(p_vals_noscreen))
-
-#Create and save QQ-plots to see how well the p-values match a uniform distribution
-quantiles_uniform <- runif(target_number)
-png("QQ_plots.png",width = 800, height = 400)
-par(mfrow = c(1, 2))
-qqplot(quantiles_uniform, p_vals_screen[1:target_number],
-       xlab = "Theoretical Quantiles", ylab = "p_vals_screen", main = "QQ-Plot: P-values under screening")
+par(mfrow = c(1,2))
+plot(ecdf(p_vals_screen),xlim = c(0, 1), ylim = c(0, 1))
 abline(0, 1, col = "red")
-
-
-qqplot(quantiles_uniform, p_vals_noscreen[1:target_number],
-       xlab = "Theoretical Quantiles", ylab = "p_vals_noscreen", main = "QQ-Plot: P-values without screening")
-abline(0, 1, col = "red")
-dev.off()
 
 #Plot a histogram of p_values under screening
-png("histogram.png",width = 350, height = 300)
 hist(p_vals_screen, main = "Histogram of p-values under screening")
-dev.off()
+
+
+#observe how small the norm_consts are, suggesting that eta_var is much smaller that sigma
+norm_consts <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$norm_consts

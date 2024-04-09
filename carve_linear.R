@@ -7,13 +7,13 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
                          sigma=sigma){
   #set.seed(42)
   #Normalize x and y before starting:
-  y<-y-mean(y)
-  for (j in dim(x)[2]){
+  y<-(y-mean(y))
+  for (j in 1:dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
-    sigma_j<-sum((x[,j]-xjbar)^2)/length(x[,j])
-    for (i in dim(x)[1]){
-      x[i,j]<-(x[i,j]-xjbar)/sigma_j
+    sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
+    for (i in 1:dim(x)[1]){
+      x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
     }
   }
   
@@ -105,6 +105,7 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
     v.i <- x.Ma.i[i,]
     v.i.norm <- sqrt(sum(v.i^2))
     eta <- b.signs[i]*v.i/v.i.norm
+    #eta <- x.Ma.i[i,]
     c <- (Sigma %*% eta) / as.numeric((t(eta) %*% Sigma %*% eta))
     z <- (diag(n.a) - c %*% t(eta)) %*% y.a
     den <- A%*%c
@@ -131,10 +132,11 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   eta_var <- sigma * (norm_consts^2)
   vlo <- vlo * norm_consts
   vup <- vup * norm_consts
-  # Turn all signs positive, as Drysdale does
-  mask = (b.signs == -1)
-  vlo[mask] <- -vlo[mask]
-  vup[mask] <- -vup[mask]
+  
+  # # Turn all signs positive, as Drysdale does
+  neg_mask = (b.signs == -1)
+  vlo[neg_mask] <- -vlo[neg_mask]
+  vup[neg_mask] <- -vup[neg_mask]
   #See comments in the RMD file for tau.1 and tau.2
   #tau.1 <- sigma
   #tau.2 <- eta_var
@@ -151,8 +153,8 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   #Defined beta^M=0 for testing the null hypothesis
   beta.M=rep(0,s)  
 
-
-  pv<-1-SNTN_CDF(z=beta_carve_D,
+  
+  cdf<-1-SNTN_CDF(z=beta_carve_D,
                  mu1=theta.1,
                  tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
                  mu2=theta.2,
@@ -161,10 +163,25 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
                  b=vup,
                  c1=c1,
                  c2=c2)
+  
+  #Inserted this to check for direction of pvals, if the sign of beta_select is negative, we take cdf
+  #to be the pv, else we take 1-cdf(line 319 in _lasso.py from Drysdales code)
+  pv <- ifelse(neg_mask, cdf, 1-cdf)
+  #For a two sided test we could also take this, as i dont fully understand the above
+  #pv <- 2*pmin(cdf, 1-cdf)
   pvals <- rep(1,p)
   pvals[chosen] <- pv
   
-  return(pvals)
+  #Give warnings if we have pvals outside of [0,1]
+  out_of_range_pvals <- pvals[pvals < 0 | pvals > 1]
+  if (length(out_of_range_pvals) > 0) {
+    warning("Found invalid pvals:", toString(out_of_range_pvals))
+
+  }
+  #clip all values to [0,1]
+  pvals <- pmin(pmax(pvals, 0), 1)
+
+  return(list(pvals=pvals, norm_consts=norm_consts))
 }
 
 

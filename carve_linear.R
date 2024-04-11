@@ -1,22 +1,32 @@
-#splits the data, performs selection on one split, calculates p-values of carving estimator as in Drydale's paper
 
-#set.seed(42)
-#Set the seed to have replicabiltiy while debugging
+#' splits the data, calculates p-values of carving estimator as in Drydale's paper
+#'
+#' @param x (matrix dim: n x p) the full design matrix
+#' @param y (vector dim: n) the full response vector
+#' @param split (vector dim: n_a) indices of observations used for selection
+#' @param beta (vector dim: p) full beta obtained from lasso selection
+#' @param lambda (numeric) lambda from lasso selection
+#' @param sigma (numeric) true variance of data generating process y~N(0,sigma*I_n)
+#' @param normalize_truncation_limits (bool) if true, truncation limits are normalized
+#'
+#' @return list containing p-values of Drysdales carving estimator and all of the inputs used for SNTN_distribution, as well
+#' as the norms of the directions of interest during the computation of the truncation limits
 
-carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.selector = list(intercept = FALSE),
-                         sigma=sigma){
-  #set.seed(42)
+carve.linear <- function(x, y, split, beta, lambda,
+                         sigma=sigma, normalize_truncation_limits = FALSE){
   #Normalize x and y before starting:
   y<-(y-mean(y))
   for (j in 1:dim(x)[2]){
     xjbar<-mean(x[,j])
     #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
+    #CHANGE: We use now 1/(n-1) in the denominator
     sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
     for (i in 1:dim(x)[1]){
       x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
     }
   }
   
+  #Split the data
   n <- length(y)
   p <- length(beta)
   n.a <- length(split)
@@ -48,6 +58,7 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   
   #Check for well-definedness of moore penrose inverses, and hence also of beta_carve_D, checking if the rank of t(x.M)%*%x.M
   #is such that it allows inversion
+  #THIS PART MAY NOT BE NECESSARY ANYMORE, AS WE PERFORM THE CHECKS FOR WELL DEFINEDNESS OF beta_carve_D ALWAYS BEFORE CALLING CARVE.LINEAR
   x.Ma.cross <- crossprod(x.Ma,x.Ma)#t(x.Ma)%*%x.Ma, s x s
   x.Mb.cross <- crossprod(x.Mb,x.Mb)#s x s
   x.Ma.cross.rank <- rankMatrix(x.Ma.cross)
@@ -94,8 +105,6 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   A <- rbind(A.0, A.1)# (2p-s) x n.a
   b <- rbind(b.0,b.1)
   
-
-  
   #Following a mix of Lee (https://github.com/selective-inference/R-software/blob/master/selectiveInference/R/funs.fixed.R) from line 231
   #and Drysdale (https://github.com/ErikinBC/sntn/blob/main/sntn/_lasso.py) from line 195
   vup <- rep(0,s)
@@ -104,16 +113,20 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   for (i in 1:s){
     v.i <- x.Ma.i[i,]
     v.i.norm <- sqrt(sum(v.i^2))
-    eta <- b.signs[i]*v.i/v.i.norm
-    #eta <- x.Ma.i[i,]
+    if(normalize_truncation_limits){
+      eta <- b.signs[i]*v.i/v.i.norm
+    }
+    else {
+      eta <- x.Ma.i[i,]
+    }
     c <- (Sigma %*% eta) / as.numeric((t(eta) %*% Sigma %*% eta))
     z <- (diag(n.a) - c %*% t(eta)) %*% y.a
     den <- A%*%c
     resid <- b-A %*% z
     #We do not consider the set V^0(z) as defined in Lee p.10, because
     #Drysdale does not do so either
-    ind.vup <- (A %*% c > 0)
-    ind.vlo <- (A %*% c < 0)
+    ind.vup <- (den > 0)
+    ind.vlo <- (den < 0)
     if (any(ind.vup)){
       vup[i] <- min(resid[ind.vup]/den[ind.vup])
     }else {
@@ -127,38 +140,42 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
     }
     norm_consts[i] <- v.i.norm
   }
-    
-  #Scale back, this is what Drysdale does, not sure if necessary
-  eta_var <- sigma * (norm_consts^2)
-  vlo <- vlo * norm_consts
-  vup <- vup * norm_consts
   
-  # # Turn all signs positive, as Drysdale does
+  
+  #y~N(x beta^0, tau^2 I_n)
+  tau.M <- sigma
   neg_mask = (b.signs == -1)
-  vlo[neg_mask] <- -vlo[neg_mask]
-  vup[neg_mask] <- -vup[neg_mask]
+  
+  if(normalize_truncation_limits){
+    #Scale back, this is what Drysdale does, not sure if necessary
+    eta_var <- sigma * (norm_consts^2)
+    vlo <- vlo * norm_consts
+    vup <- vup * norm_consts
+    
+    # Turn all signs positive, as Drysdale does
+    #NEW CHANGES: Drysdales command V[mask] = -V[mask][:,[1,0]] also swaps vlo and vup at the positions of mask, not only changing their signs
+    vlo_temp <- vlo
+    vlo[neg_mask] <- -vup[neg_mask]
+    vup[neg_mask] <- -vlo_temp[neg_mask]
+  }
+  else{
+    eta_var <- tau.M
+  }
   #See comments in the RMD file for tau.1 and tau.2
-  #tau.1 <- sigma
-  #tau.2 <- eta_var
+  tau.1 <- diag(tau.M*solve(t(x.Mb)%*%x.Mb))
+  tau.2 <- diag(eta_var*solve(t(x.Ma)%*%x.Ma))
   
 
   #REMARK: Drysdale sets theta1 = theta2 = beta_null for the sntn dist, where beta_null is the assumed beta under the null, 
   #so in our case an all zeros vector of dimension beta_carve_D, for reference: see parameters of run_inference in _lasso.py
   theta.1 <- rep(0,s)
-  theta.2 <- theta.1
+  theta.2 <- rep(0,s)
   
-  #y~N(x beta^0, tau^2 I_n)
-  tau.M=sigma
-
-  #Defined beta^M=0 for testing the null hypothesis
-  beta.M=rep(0,s)  
-
-  
-  cdf<-1-SNTN_CDF(z=beta_carve_D,
+  cdf<-SNTN_CDF(z=beta_carve_D,
                  mu1=theta.1,
-                 tau1=diag(tau.M*solve(t(x.Mb)%*%x.Mb)),
+                 tau1=tau.1,
                  mu2=theta.2,
-                 tau2=diag(tau.M*solve(t(x.Ma)%*%x.Ma)),
+                 tau2=tau.2,
                  a=vlo,
                  b=vup,
                  c1=c1,
@@ -166,9 +183,9 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   
   #Inserted this to check for direction of pvals, if the sign of beta_select is negative, we take cdf
   #to be the pv, else we take 1-cdf(line 319 in _lasso.py from Drysdales code)
-  pv <- ifelse(neg_mask, cdf, 1-cdf)
+  #pv <- ifelse(neg_mask, cdf, 1-cdf)
   #For a two sided test we could also take this, as i dont fully understand the above
-  #pv <- 2*pmin(cdf, 1-cdf)
+  pv <- 2*pmin(cdf, 1-cdf)
   pvals <- rep(1,p)
   pvals[chosen] <- pv
   
@@ -181,7 +198,8 @@ carve.linear <- function(x, y, split, beta, lambda,fraction = 0.9, args.model.se
   #clip all values to [0,1]
   pvals <- pmin(pmax(pvals, 0), 1)
 
-  return(list(pvals=pvals, norm_consts=norm_consts))
+  return(list(pvals=pvals, norm_consts=norm_consts, beta_carve_D = beta_carve_D, tau.1 = tau.1,
+              tau.2 = tau.2, vlo = vlo, vup = vup, c1=c1, c2=c2))
 }
 
 

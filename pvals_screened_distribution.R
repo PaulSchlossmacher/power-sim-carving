@@ -1,5 +1,4 @@
-#Trying to create a more extreme Toeplitz example with less noise to 
-#encourage Lasso to use more variables:
+#Trying to test the distribution of pvalues under screening
 # Clear all variables
 rm(list = ls())
 
@@ -69,7 +68,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 500
+target_number <- 300
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -104,7 +103,8 @@ while (p_val_screen_count < target_number){
     
   }
   
-  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$pvals
+  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
+                           sigma=sigma, normalize_truncation_limits = FALSE)$pvals
   
   sel.index <- which(beta_tmp != 0)
   #check screening condition
@@ -133,4 +133,4 @@ hist(p_vals_screen, main = "Histogram of p-values under screening")
 
 
 #observe how small the norm_consts are, suggesting that eta_var is much smaller that sigma
-norm_consts <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$norm_consts
+#norm_consts <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$norm_consts

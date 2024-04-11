@@ -165,9 +165,19 @@ During the simulation it happened sometimes that the model selection did select 
 
 ## Filip Tuesday, April 9th
 * During meeting with Paul we corrected the normalization at the beginning of carve.linear, which was performing its normalization only on the last column
-* Analyzed code of Drysdale again. Found a mismatch in our p-value definition at the end of carve.linear. We should account for the signs of beta_select, as the p-values should capture the extreme realizations in both the positive and negative directions.
+* Analyzed code of Drysdale again. Found a mismatch in our p-value definition at the end of carve.linear. We should account for the signs of beta_select, as the p-values should capture the extreme realizations in both the positive and negative directions. The other choice which would be more familiar to me, is to perform a two sided test.
 * Found that carve linear sometimes returns p-values outside the range $[0,1]$, potentially highlighting some mistake in the implementation of SNTN_cdf distribution. The deviations where very small, mostly around $10^{-15}$, suggesting hopefully only some numerical issues. Drysdale clips his cdf values to $[0,1]$, which makes me believe that he observed a similar behaviour. I implemented the same clipping, but with additional warnings.
 * I created a new file "pvals_sceened_distribution"" which serves the purpose of analyzing the distribution of p-values of truly inactive coefs given screening. For this I lowered the variance in the data generation to obtain higher screening probability and faster p-values accumulation in the simulation loop. We get plots of the empirical cdf, which should optimally be a diagonal line, and a histogram.
+
+## Filip Thursday, April 11th
+* Added a SNTN_pdf to SNTN_distribution for visualization purposes. As the sum of two gaussians is gaussian, the pdf looks gaussian when choosing the truncation limits large. We get strongly deviating distributions from a gaussian by changing the variance of the TN distribution and lowering its truncation limits, as this will put alot of mass around the mode. Some playing around with the parameters suggests that the SNTN pdf works as it should. The cdf is a bit harder to analyze visually, but it seems to reflect the shape of the pdf well.
+* Added all the inputs for SNTN_CDF to be returned by carve_linear for debugging purposes.
+* Carve_linear has now the option to choose if we want normalization of truncation limits and TN variance (following Drysdales approach) or no normalization following the paper of Lee et al. directly.
+* Found a mistake in implementation of truncation limit normalization when comparing again to Drysdales code, mainly line 224 in _lasso.py also swaps the corresponding entries of vlo and vup at the positions where we had flipped the signs
+* Found that vlo is not always smaller than vup. In many cases all of vlo's entries are higher than the corresponding vup entries. But rarely it happens that some of them are lower and others higher, which indicates that just swapping vlo with vup is not the right solution. To see this, run pvals_screened_distribution and check the warnings.
+* When looking at the vlo, vup entries you see that many are around zero and the rest just explode to very high numbers.
+* If we are going to ask Christoph for some help, we need a bit clearer code. I added some function parameter documentation in SNTN_CDF and carve_linear and removed some unnecessary function inputs, like args.model.selector, which were not used by now
+
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample_size 1000"}
 knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
 ```

@@ -194,6 +194,30 @@ knitr::include_graphics("QQ_plots_without_normalization.png")
 knitr::include_graphics("histogram_without_normalization.png")
 ```
 
+
+## Paul Monday, April 15th
+
+Notes:
+
+* Regarding the normalization: Drysdale also does \texttt{y_M = self.y_screen - self.y_screen.mean()} in his \texttt{_inference_on_screened} function.
+
+Changes in carve_linear_clean:
+
+* Changed the variable name \textit{sigma} to \textit{sigma_squ} where necessary to avoid confusion.
+
+* Deleted the checks for well-definition of the Moore-Penrose Inverse as already suggested by Filip.
+
+* Thoroughly went through all the calculations for V- and V+ again to find the mistake - without any success yet. 
+
+* Thought: What's weird about our results is both $V^{-}(z)$ and $V^{+}(z)$ being very small (Almost 0). Since: $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}$, the fact that $V^{-}(z)$ is close to 0, must mean that either $b_j-(Az)_j$ is very small (in absolute values) or $(Ac)_j$ is very big. However we let carve.linear output those values (In this case the ones for the last entry, so the s-th entry). We saw there by checking the min and max of both that $(Ac)_j \in [-0.14, 0.05]$ and $b_j-(Az)_j \in [-1.7, 3.65]$. Both numbers don't seem unreasonably extreme. We conclude that it must therefore be in the normalization steps etc. where those values become so much smaller. Will investigate this further tomorrow.
+
+* Even though Drysdale does not implement $V^0(z)$, Lee actually says in Lemma 5.1 (p. 10): 
+
+$$
+\{Ay\leq b\}=\{V^{-}(z)\leq\eta^Ty\leq V^{+}(z), V^{0}(z)\geq 0\}
+$$
+So in order to test whether this last condition for V0(z) actually holds, I tried to calculate it explicitly as well, however this led to NAs for both Vlo and Vup - will check in on this tomorrow again.
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

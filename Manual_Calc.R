@@ -1,3 +1,44 @@
+# ----------- Dependencies
+
+#Local, user specific path, that should work for both of us:
+Local_path<-getwd()
+hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
+
+#Different paths here, because they're "our own" functions
+SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
+split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
+carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+carve_linear_clean_path<-paste(Local_path, "/carve_linear_clean.R", sep="")
+
+library(MASS)
+library(mvtnorm)
+library(glmnet)
+library(Matrix)
+library(tictoc)
+library(hdi)
+library(selectiveInference)
+library(doSNOW)
+library(parallel)
+library(doRNG)
+library(truncnorm)
+library(git2r)
+
+
+source(hdi_adjustments_path)
+source(carving_path)
+source(sample_from_truncated_path)
+source(tryCatchWE_path)
+source(SNTN_distribution_path)
+source(split_select_function_path)
+source(carve_linear_path)
+source(carve_linear_clean_path)
+
+#--------------------------
+
+
 #-------------------- Toeplitz Carving simulation from Christoph ----------------------
 n <- 100
 p <- 200
@@ -6,8 +47,8 @@ fraq = 0.9
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 sel.index <- c(1, 5, 10, 15, 20)#active predictors
-beta <- rep(0, p)#initialize beta as all zeros
-beta[sel.index] <- 1#put ones at active predictor positions
+beta_0 <- rep(0, p)#initialize beta as all zeros
+beta_0[sel.index] <- 1#put ones at active predictor positions
 sparsity <- 5
 set.seed(42) # to make different methods comparable, fix the x-matrix
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
@@ -15,6 +56,12 @@ y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 2
 y <- y.true + sigma * rnorm(n)
+
+
+split.select.list <- split.select(x,y,fraction = fraq)
+lambda <- split.select.list$lambda
+split <- split.select.list$split
+beta <- split.select.list$beta
 
 
 #Normalize x and y before starting:
@@ -122,15 +169,15 @@ for (i in 1:s){
   if (any(ind.vlo)){
     vlo[i] <- max(resid[ind.vlo]/den[ind.vlo])
   }else {
-    vlo[i] <- -
-  }Inf
+    vlo[i] <- -Inf
+  }
   
   
   # ------- For testing V0(z)
   #According to Lemma 5.1 in Lee's paper, {Ay<=b}={V-(z)<=eta^T y <=V+(z), V0(z)>=0}
   
   if (any(ind.v0)){
-    v0[i] <- min(resid[ind.vlo])
+    v0[i] <- min(resid[ind.v0])
   }else {
     
     # I guess the choice here could be disputed, but 0 makes the most sense to me

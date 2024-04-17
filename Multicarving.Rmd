@@ -179,19 +179,19 @@ During the simulation it happened sometimes that the model selection did select 
 * If we are going to ask Christoph for some help, we need a bit clearer code. I added some function parameter documentation in SNTN_CDF and carve_linear and removed some unnecessary function inputs, like args.model.selector, which were not used by now
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample_size 1000"}
-knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
+knitr::include_graphics("plots/QQ_plots_carve_linear_version1(N=1000).png")
 ```
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, where only the variance of the truncated normal distribution has a changed paramater from $\\tau_M = \\sigma^2$ to the scaled eta_var from Drysdale's Code. Both plots use sample_size 1000"}
-knitr::include_graphics("QQ_plots_carve_linear_with_eta_var(N=1000).png")
+knitr::include_graphics("plots/QQ_plots_carve_linear_with_eta_var(N=1000).png")
 ```
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed on p-values from carve.linear which did not normalize in the computation of the truncation limits. Both plots use sample_size 1000"}
-knitr::include_graphics("QQ_plots_without_normalization.png")
+knitr::include_graphics("plots/QQ_plots_without_normalization.png")
 ```
 
 ```{r, echo=FALSE,fig.cap="Histogram of p-values under screening obtained from carve.linear without normalization of truncation limits."}
-knitr::include_graphics("histogram_without_normalization.png")
+knitr::include_graphics("plots/histogram_without_normalization.png")
 ```
 
 
@@ -240,7 +240,7 @@ We also noticed that the maximum (or minimum for $V^{+}(z)$) was typically being
 However even though we now have reasonable values for the truncation limits, our plots of p-values of the selected but non-truly-active coefficients under the Null hypothesis still do not display a uniform distribution.
 
 ```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
-knitr::include_graphics("histogram_and_cdf_of_screened_pvals.png")
+knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals.png")
 ```
 
 

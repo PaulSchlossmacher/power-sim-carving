@@ -43,16 +43,16 @@ source(carve_linear_clean_path)
 n <- 100
 p <- 200
 rho <- 0.6
-fraq = 0.9
+fraq = 0.7
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 sel.index <- c(1, 5, 10, 15, 20)#active predictors
 beta_0 <- rep(0, p)#initialize beta as all zeros
 beta_0[sel.index] <- 1#put ones at active predictor positions
 sparsity <- 5
-set.seed(42) # to make different methods comparable, fix the x-matrix
+set.seed(41) # to make different methods comparable, fix the x-matrix
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
-y.true <- x %*% beta
+y.true <- x %*% beta_0
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 2
 y <- y.true + sigma * rnorm(n)
@@ -138,6 +138,10 @@ vup <- rep(0,s)
 vlo <- rep(0,s)
 v0 <- rep(0,s)
 
+keep_zero_resid <- list()
+keep_zero_den <- list()
+keep_zero_A <- list()
+keep_zero_c <- list()
 norm_consts <- rep(0,s)
 for (i in 1:s){
   v.i <- x.Ma.i[i,]
@@ -157,9 +161,8 @@ for (i in 1:s){
   #Drysdale does not do so either
   ind.vup <- (den > 0)
   ind.vlo <- (den < 0)
-  ind.v0 <- (den = 0)
-  
-  
+  ind.v0 <- (den == 0)
+ 
   if (any(ind.vup)){
     vup[i] <- min(resid[ind.vup]/den[ind.vup])
   }else {
@@ -178,6 +181,15 @@ for (i in 1:s){
   
   if (any(ind.v0)){
     v0[i] <- min(resid[ind.v0])
+    
+    resid_zero_name <- paste0("resid",i)
+    den_zero_name <- paste0("den",i)
+    A_zero_name <- paste0("A",i)
+    c_zero_name <- paste0("c",i)
+    keep_zero_resid[[resid_zero_name]] <- resid
+    keep_zero_den[[den_zero_name]] <- den
+    keep_zero_A[[A_zero_name]] <- A 
+    keep_zero_c[[c_zero_name]] <- c
   }else {
     
     # I guess the choice here could be disputed, but 0 makes the most sense to me

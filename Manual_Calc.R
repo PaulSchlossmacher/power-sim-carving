@@ -138,10 +138,13 @@ vup <- rep(0,s)
 vlo <- rep(0,s)
 v0 <- rep(0,s)
 
+keep_zero_ind <- c()
 keep_zero_resid <- list()
 keep_zero_den <- list()
 keep_zero_A <- list()
 keep_zero_c <- list()
+
+keep_ind_vlo <- list()
 norm_consts <- rep(0,s)
 for (i in 1:s){
   v.i <- x.Ma.i[i,]
@@ -160,7 +163,9 @@ for (i in 1:s){
   #We do not consider the set V^0(z) as defined in Lee p.10, because
   #Drysdale does not do so either
   ind.vup <- (den > 0)
+  ind.vup <- which(ind.vup == TRUE)[which(resid[ind.vup]>0)]
   ind.vlo <- (den < 0)
+  ind.vlo <- which(ind.vlo == TRUE)[which(resid[ind.vlo]>0)]
   ind.v0 <- (den == 0)
  
   if (any(ind.vup)){
@@ -171,7 +176,9 @@ for (i in 1:s){
   
   if (any(ind.vlo)){
     vlo[i] <- max(resid[ind.vlo]/den[ind.vlo])
-  }else {
+    keep_ind_vlo[[i]] = ind.vlo
+  }
+  else {
     vlo[i] <- -Inf
   }
   
@@ -181,7 +188,7 @@ for (i in 1:s){
   
   if (any(ind.v0)){
     v0[i] <- min(resid[ind.v0])
-    
+    keep_zero_ind <- c(keep_zero_ind, i)
     resid_zero_name <- paste0("resid",i)
     den_zero_name <- paste0("den",i)
     A_zero_name <- paste0("A",i)
@@ -202,3 +209,15 @@ for (i in 1:s){
 v0
 vlo
 vup
+# for (i in 1:length(keep_zero_den)){
+#   print(which(keep_zero_den[[i]] == 0))
+# }
+# 
+# results <- sapply(keep_zero_den, function(x) {
+#   # Get indices where elements are 0
+#   zero_indices <- which(x == 0)
+#   
+#   # Check if any of these indices are greater than the number of rows in A.0
+#   any(zero_indices > dim(A.0)[1])
+# })
+

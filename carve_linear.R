@@ -6,7 +6,7 @@
 #' @param split (vector dim: n_a) indices of observations used for selection
 #' @param beta (vector dim: p) full beta obtained from lasso selection
 #' @param lambda (numeric) lambda from lasso selection
-#' @param sigma (numeric) true variance of data generating process y~N(0,sigma*I_n)
+#' @param sigma (numeric) true variance of data generating process y~N(0,sigma^2*I_n)
 #' @param normalize_truncation_limits (bool) if true, truncation limits are normalized
 #'
 #' @return list containing p-values of Drysdales carving estimator and all of the inputs used for SNTN_distribution, as well
@@ -14,12 +14,11 @@
 
 carve.linear <- function(x, y, split, beta, lambda,
                          sigma=sigma, normalize_truncation_limits = FALSE){
+  
   #Normalize x and y before starting:
   y<-(y-mean(y))
   for (j in 1:dim(x)[2]){
     xjbar<-mean(x[,j])
-    #Calculate the variance with 1/n in the denominator as per Bühlmann's HDS lecture:
-    #CHANGE: We use now 1/(n-1) in the denominator
     sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
     for (i in 1:dim(x)[1]){
       x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
@@ -35,16 +34,17 @@ carve.linear <- function(x, y, split, beta, lambda,
   y.a <- y[split, ]
   x.b <- x[-split, ]
   y.b <- y[-split, ]
-  sigma <- sigma
+  sigma_squ <- sigma
+  
   #Sigma gets chosen in accordance with the distribution of y_A in Lemma 3.2
-  Sigma <- diag(n.a)*sigma
+  Sigma <- diag(n.a)*sigma_squ
   c1<-n.b/n
   c2<-n.a/n
   
   chosen <-  which(abs(beta) > 0) # selected variables
   s <- length(chosen)
   b.signs <- sign(beta[chosen])
-
+  
   if (s == 0)
     stop("0 variables were chosen by the Lasso")
   
@@ -55,28 +55,6 @@ carve.linear <- function(x, y, split, beta, lambda,
   #extract inactive variables from both splits
   x_Ma <- x.a[, -chosen]#(n.a x (p-s))
   x_Mb <- x.b[, -chosen]
-  
-  #Check for well-definedness of moore penrose inverses, and hence also of beta_carve_D, checking if the rank of t(x.M)%*%x.M
-  #is such that it allows inversion
-  #THIS PART MAY NOT BE NECESSARY ANYMORE, AS WE PERFORM THE CHECKS FOR WELL DEFINEDNESS OF beta_carve_D ALWAYS BEFORE CALLING CARVE.LINEAR
-  x.Ma.cross <- crossprod(x.Ma,x.Ma)#t(x.Ma)%*%x.Ma, s x s
-  x.Mb.cross <- crossprod(x.Mb,x.Mb)#s x s
-  x.Ma.cross.rank <- rankMatrix(x.Ma.cross)
-  x.Mb.cross.rank <- rankMatrix(x.Mb.cross)
-  if ((x.Ma.cross.rank < s) && (x.Mb.cross.rank < s)){
-    cat("the dimension of t(x.Ma)%*%x.Ma is ", dim(x.Ma.cross)[1], "x",dim(x.Ma.cross)[2], "but the rank of it is ", x.Ma.cross.rank, "\n")
-    cat("the dimension of t(x.Mb)%*%x.Mb is ", dim(x.Mb.cross)[1], "x",dim(x.Mb.cross)[2], "but the rank of it is ", x.Mb.cross.rank, "\n")
-    stop("Both t(x.Ma)%*%X.Ma and t(x.Mb)%*%X.Mb are not invertible")
-  }
-  if (x.Ma.cross.rank < s){
-    cat("the dimension of t(x.Ma)%*%x.Ma is ", dim(x.Ma.cross)[1], "x",dim(x.Ma.cross)[2], "but the rank of it is ", x.Ma.cross.rank, "\n")
-    stop("t(x.Ma)%*%X.Ma) is not invertible")
-  }
-  if (x.Mb.cross.rank < s){
-    cat("the dimension of t(x.Mb)%*%x.Mb is ", dim(x.Mb.cross)[1], "x",dim(x.Mb.cross)[2], "but the rank of it is ", x.Mb.cross.rank, "\n")
-    stop("t(x.Mb)%*%X.Mb) is not invertible")
-  }
-  
   
   #compute the moore penrose inverse of active variables in both splits
   x.Ma.i <- ginv(x.Ma)#(s x na)
@@ -126,7 +104,12 @@ carve.linear <- function(x, y, split, beta, lambda,
     #We do not consider the set V^0(z) as defined in Lee p.10, because
     #Drysdale does not do so either
     ind.vup <- (den > 0)
+    #The next line ensures that when calculating vup we only consider the cases where resid is positive
+    ind.vup <- which(ind.vup == TRUE)[which(resid[ind.vup]>0)]
     ind.vlo <- (den < 0)
+    #Same here for vlo, this is important for vlo to be smaller than vup
+    ind.vlo <- which(ind.vlo == TRUE)[which(resid[ind.vlo]>0)]
+    ind.v0 <- (den == 0)
     if (any(ind.vup)){
       vup[i] <- min(resid[ind.vup]/den[ind.vup])
     }else {
@@ -141,14 +124,12 @@ carve.linear <- function(x, y, split, beta, lambda,
     norm_consts[i] <- v.i.norm
   }
   
-  
-  #y~N(x beta^0, tau^2 I_n)
-  tau.M <- sigma
+  tau.M <- sigma_squ
   neg_mask = (b.signs == -1)
   
   if(normalize_truncation_limits){
     #Scale back, this is what Drysdale does, not sure if necessary
-    eta_var <- sigma * (norm_consts^2)
+    eta_var <- sigma_squ * (norm_consts^2)
     vlo <- vlo * norm_consts
     vup <- vup * norm_consts
     
@@ -165,21 +146,21 @@ carve.linear <- function(x, y, split, beta, lambda,
   tau.1 <- diag(tau.M*solve(t(x.Mb)%*%x.Mb))
   tau.2 <- diag(eta_var*solve(t(x.Ma)%*%x.Ma))
   
-
+  
   #REMARK: Drysdale sets theta1 = theta2 = beta_null for the sntn dist, where beta_null is the assumed beta under the null, 
   #so in our case an all zeros vector of dimension beta_carve_D, for reference: see parameters of run_inference in _lasso.py
   theta.1 <- rep(0,s)
   theta.2 <- rep(0,s)
   
   cdf<-SNTN_CDF(z=beta_carve_D,
-                 mu1=theta.1,
-                 tau1=tau.1,
-                 mu2=theta.2,
-                 tau2=tau.2,
-                 a=vlo,
-                 b=vup,
-                 c1=c1,
-                 c2=c2)
+                mu1=theta.1,
+                tau1=tau.1,
+                mu2=theta.2,
+                tau2=tau.2,
+                a=vlo,
+                b=vup,
+                c1=c1,
+                c2=c2)
   
   #Inserted this to check for direction of pvals, if the sign of beta_select is negative, we take cdf
   #to be the pv, else we take 1-cdf(line 319 in _lasso.py from Drysdales code)
@@ -193,28 +174,12 @@ carve.linear <- function(x, y, split, beta, lambda,
   out_of_range_pvals <- pvals[pvals < 0 | pvals > 1]
   if (length(out_of_range_pvals) > 0) {
     warning("Found invalid pvals:", toString(out_of_range_pvals))
-
+    
   }
   #clip all values to [0,1]
   pvals <- pmin(pmax(pvals, 0), 1)
-
+  
   return(list(pvals=pvals, norm_consts=norm_consts, beta_carve_D = beta_carve_D, tau.1 = tau.1,
               tau.2 = tau.2, vlo = vlo, vup = vup, c1=c1, c2=c2, x.Ma.i=x.Ma.i, x.Mb.i=x.Mb.i,
               y.a=y.a, y.b=y.b))
 }
-
-
-
-#----------------------For manually computing these values: -----------------------------------------
-#In the Drysdale paper, sigma_1 gets defined via the entry jj for all j. Therefore we take the diagonal
-#of the matrix and work with that
-#Since it's a diagonal matrix, we can just apply the inverse at the end, which is
-#computationally easier
-# sigma.1=(tau.M/n^2)*((n.b^2*diag((t(x.Mb)%*%x.Mb))^-1)+(n.a^2*diag((t(x.Ma)%*%x.Ma))^-1))
-# sigma.2=tau.M*diag((t(x.Ma)%*%x.Ma))^-1
-# w=(vlo-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
-# delta=(vup-beta.M)/(sqrt(tau.M)*diag((t(x.Ma)%*%x.Ma))^(-1/2))
-#I'm assuming that we need the jj-th entry again here everywhere. Otherwise division 
-# wouldn't make sense and we'd need to build some sort of framework for allowing the sqrt
-# rho=sqrt(n*n.a)*(diag(t(x.Ma)%*%x.Ma))^(-1/2)/
-#   sqrt(n.b^2*diag((t(x.Mb)%*%x.Mb))^-1 + n.a^2*diag((t(x.Ma)%*%x.Ma))^-1)

@@ -153,7 +153,7 @@ During the simulation it happened sometimes that the model selection did select 
 * We could try to implement some kind of optional FWER control into carve.linear. For example through a Bonferroni correction
 * We could ask for permission to the D-MATH computation hardware and scale up our simulations for a more thorough comparison between carve.lasso and carve.linear
 
-## Filip, Wednesday April 4th
+## Filip, Thursday April 4th
 * I created a new branch called Inspection of p-value distribution. In this branch is a new file p_vals_distribution
 * I used fraq = 0.7 and sigma = 1.9 which gave empirically a similar amount of successful screening as not successful screening
 * The simulation loop is still not optimized, as it runs as long as we have enough p-values under screening as well as without screening. We could have for example also just focused on one of them at a time. For example lowering the sigma and analysing p-values under screening followed by higher sigma and analysis of p-values without screening.
@@ -162,6 +162,21 @@ During the simulation it happened sometimes that the model selection did select 
 * First i did plots for the carve_linear version that we used in our carve.lasso comparison and got the plots in figure 1. Next i tried to use the scaled variance eta_var, which is the one that drysdale used in his python code and got the plots in figure 2. These seem to be even worse.
 * Lastly I changed the calculation of the truncation limits in carve_linear to not perform normalization, as would be the natural solution following Lee's paper. This is pictured in figure 3. The resulting p-values appear to have a similar distribution as our initial implementation from figure 1. Additionally I plotted a histogram for this case, to get a better visualization of the distribution of the p-values.
 * Next steps: Maybe perform statistical tests for the hypothesis that we actually do not have uniform p-values as we should have. Other than that we would need to go again over the theory the check where our implementation of carve.linear went wrong. Just by looking at the QQ-plots it seems to be way off, but symmetric around the median with the median being the same as expected from a uniform distribution.
+
+## Filip Tuesday, April 9th
+* During meeting with Paul we corrected the normalization at the beginning of carve.linear, which was performing its normalization only on the last column
+* Analyzed code of Drysdale again. Found a mismatch in our p-value definition at the end of carve.linear. We should account for the signs of beta_select, as the p-values should capture the extreme realizations in both the positive and negative directions. The other choice which would be more familiar to me, is to perform a two sided test.
+* Found that carve linear sometimes returns p-values outside the range $[0,1]$, potentially highlighting some mistake in the implementation of SNTN_cdf distribution. The deviations where very small, mostly around $10^{-15}$, suggesting hopefully only some numerical issues. Drysdale clips his cdf values to $[0,1]$, which makes me believe that he observed a similar behaviour. I implemented the same clipping, but with additional warnings.
+* I created a new file "pvals_sceened_distribution"" which serves the purpose of analyzing the distribution of p-values of truly inactive coefs given screening. For this I lowered the variance in the data generation to obtain higher screening probability and faster p-values accumulation in the simulation loop. We get plots of the empirical cdf, which should optimally be a diagonal line, and a histogram.
+
+## Filip Thursday, April 11th
+* Added a SNTN_pdf to SNTN_distribution for visualization purposes. As the sum of two gaussians is gaussian, the pdf looks gaussian when choosing the truncation limits large. We get strongly deviating distributions from a gaussian by changing the variance of the TN distribution and lowering its truncation limits, as this will put alot of mass around the mode. Some playing around with the parameters suggests that the SNTN pdf works as it should. The cdf is a bit harder to analyze visually, but it seems to reflect the shape of the pdf well.
+* Added all the inputs for SNTN_CDF to be returned by carve_linear for debugging purposes.
+* Carve_linear has now the option to choose if we want normalization of truncation limits and TN variance (following Drysdales approach) or no normalization following the paper of Lee et al. directly.
+* Found a mistake in implementation of truncation limit normalization when comparing again to Drysdales code, mainly line 224 in _lasso.py also swaps the corresponding entries of vlo and vup at the positions where we had flipped the signs
+* Found that vlo is not always smaller than vup. In many cases all of vlo's entries are higher than the corresponding vup entries. But rarely it happens that some of them are lower and others higher, which indicates that just swapping vlo with vup is not the right solution. To see this, run pvals_screened_distribution and check the warnings.
+* When looking at the vlo, vup entries you see that many are around zero and the rest just explode to very high numbers.
+* If we are going to ask Christoph for some help, we need a bit clearer code. I added some function parameter documentation in SNTN_CDF and carve_linear and removed some unnecessary function inputs, like args.model.selector, which were not used by now
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample_size 1000"}
 knitr::include_graphics("QQ_plots_carve_linear_version1(N=1000).png")
@@ -178,6 +193,56 @@ knitr::include_graphics("QQ_plots_without_normalization.png")
 ```{r, echo=FALSE,fig.cap="Histogram of p-values under screening obtained from carve.linear without normalization of truncation limits."}
 knitr::include_graphics("histogram_without_normalization.png")
 ```
+
+
+## Paul Monday, April 15th
+
+Notes:
+
+* Regarding the normalization: Drysdale also does y_M = self.y_screen - self.y_screen.mean() in his _inference_on_screened function.
+
+Changes in carve_linear_clean:
+
+* Changed the variable name sigma to sigma_squ where necessary to avoid confusion.
+
+* Deleted the checks for well-definition of the Moore-Penrose Inverse as already suggested by Filip.
+
+* Thoroughly went through all the calculations for V- and V+ again to find the mistake - without any success yet. 
+
+* Thought: What's weird about our results is both $V^{-}(z)$ and $V^{+}(z)$ being very small (Almost 0). Since: $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}$, the fact that $V^{-}(z)$ is close to 0, must mean that either $b_j-(Az)_j$ is very small (in absolute values) or $(Ac)_j$ is very big. However we let carve.linear output those values (In this case the ones for the last entry, so the s-th entry). We saw there by checking the min and max of both that $(Ac)_j \in [-0.14, 0.05]$ and $b_j-(Az)_j \in [-1.7, 3.65]$. Both numbers don't seem unreasonably extreme. We conclude that it must therefore be in the normalization steps etc. where those values become so much smaller. Will investigate this further tomorrow.
+
+* Even though Drysdale does not implement $V^0(z)$, Lee actually says in Lemma 5.1 (p. 10): 
+
+$$
+\{Ay\leq b\}=\{V^{-}(z)\leq\eta^Ty\leq V^{+}(z), V^{0}(z)\geq 0\}
+$$
+So in order to test whether this last condition for V0(z) actually holds, I tried to calculate it explicitly as well, however this led to NAs for both Vlo and Vup - will check in on this tomorrow again.
+
+## Filip & Paul, Wednesdy April 17th:
+
+We discussed possible reasons for the distribution of the p-values under the null hypothesis not being uniform. We chiefly focused on $V^{-}(z)$ and $V^{+}(z)$
+
+### Starting point:
+With how things were implemented initially, we almost always got $V^{-}(z)$ > $V^{+}(z)$ with both $V^{-}(z)$ having mostly positive and $V^{+}(z)$ mostly negative values. In absolute values, the majority of both entries were also about 10e+14 big, so very very large.
+
+### Progress made:
+After going through the calculations of both numerator and denominator (See again Lee p.10 for details) for $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}$, we realised that this was mainly due the denominator $(Ac)_j$ being very small and not due to $b_j-(Az)_j$ being very big.\\
+We also noticed that the maximum (or minimum for $V^{+}(z)$) was typically being chosen as follows:
+
+* For $V^{-}(z)$: For the majority of the indices j, $b_j-(Az)_j>0$. Since $(Ac)_j<0$ by definition, in these cases the whole fraction $\frac{b_j-(Az)_j}{(Ac)_j}$<0. However for a few indices we had $b_j-(Az)_j<0$ and thus $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}>0$. Of course $\max_j$ was then one of the cases where $b_j-(Az)_j<0$, since the sign of the whole fraction was actually positive here.
+
+* Conversely, the same opposite thing happened for $V^{+}(z)$. Again for a few indices $b_j-(Az)_j<0$ and thus $\min_j$ was chosen such that $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}<0$.
+
+* This explains, why in most cases we had $V^{-}(z) > V^{+}(z)$. We solved this issue by excluding all those indices $j$ from the computation of $\min_j$ and $\max_j$, where $b_j-(Az)_j<0$.
+
+* Now we have both $V^{-}(z) < V^{+}(z)$ in all cases (as should be, remember: $V^{-}(z)$ and $V^{+}(z)$ are the respective truncation limits for the truncated normal distribution) and also reasonably big values in the range of $\pm 10$.
+
+However even though we now have reasonable values for the truncation limits, our plots of p-values of the selected but non-truly-active coefficients under the Null hypothesis still do not display a uniform distribution.
+
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+knitr::include_graphics("histogram_and_cdf_of_screened_pvals.png")
+```
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

@@ -199,11 +199,11 @@ knitr::include_graphics("histogram_without_normalization.png")
 
 Notes:
 
-* Regarding the normalization: Drysdale also does \texttt{y_M = self.y_screen - self.y_screen.mean()} in his \texttt{_inference_on_screened} function.
+* Regarding the normalization: Drysdale also does y_M = self.y_screen - self.y_screen.mean() in his _inference_on_screened function.
 
 Changes in carve_linear_clean:
 
-* Changed the variable name \textit{sigma} to \textit{sigma_squ} where necessary to avoid confusion.
+* Changed the variable name sigma to sigma_squ where necessary to avoid confusion.
 
 * Deleted the checks for well-definition of the Moore-Penrose Inverse as already suggested by Filip.
 
@@ -217,6 +217,32 @@ $$
 \{Ay\leq b\}=\{V^{-}(z)\leq\eta^Ty\leq V^{+}(z), V^{0}(z)\geq 0\}
 $$
 So in order to test whether this last condition for V0(z) actually holds, I tried to calculate it explicitly as well, however this led to NAs for both Vlo and Vup - will check in on this tomorrow again.
+
+## Filip & Paul, Wednesdy April 17th:
+
+We discussed possible reasons for the distribution of the p-values under the null hypothesis not being uniform. We chiefly focused on $V^{-}(z)$ and $V^{+}(z)$
+
+### Starting point:
+With how things were implemented initially, we almost always got $V^{-}(z)$ > $V^{+}(z)$ with both $V^{-}(z)$ having mostly positive and $V^{+}(z)$ mostly negative values. In absolute values, the majority of both entries were also about 10e+14 big, so very very large.
+
+### Progress made:
+After going through the calculations of both numerator and denominator (See again Lee p.10 for details) for $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}$, we realised that this was mainly due the denominator $(Ac)_j$ being very small and not due to $b_j-(Az)_j$ being very big.\\
+We also noticed that the maximum (or minimum for $V^{+}(z)$) was typically being chosen as follows:
+
+* For $V^{-}(z)$: For the majority of the indices j, $b_j-(Az)_j>0$. Since $(Ac)_j<0$ by definition, in these cases the whole fraction $\frac{b_j-(Az)_j}{(Ac)_j}$<0. However for a few indices we had $b_j-(Az)_j<0$ and thus $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}>0$. Of course $\max_j$ was then one of the cases where $b_j-(Az)_j<0$, since the sign of the whole fraction was actually positive here.
+
+* Conversely, the same opposite thing happened for $V^{+}(z)$. Again for a few indices $b_j-(Az)_j<0$ and thus $\min_j$ was chosen such that $V^{-}(z)=\max_j \frac{b_j-(Az)_j}{(Ac)_j}<0$.
+
+* This explains, why in most cases we had $V^{-}(z) > V^{+}(z)$. We solved this issue by excluding all those indices $j$ from the computation of $\min_j$ and $\max_j$, where $b_j-(Az)_j<0$.
+
+* Now we have both $V^{-}(z) < V^{+}(z)$ in all cases (as should be, remember: $V^{-}(z)$ and $V^{+}(z)$ are the respective truncation limits for the truncated normal distribution) and also reasonably big values in the range of $\pm 10$.
+
+However even though we now have reasonable values for the truncation limits, our plots of p-values of the selected but non-truly-active coefficients under the Null hypothesis still do not display a uniform distribution.
+
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+knitr::include_graphics("histogram_and_cdf_of_screened_pvals.png")
+```
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

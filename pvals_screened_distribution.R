@@ -123,14 +123,15 @@ while (p_val_screen_count < target_number){
   
 }
 cat("We had ", sum(screening), " successful screenings out of ", rounds, " simulations.")
-
+png("histogram_and_cdf_of_screened_pvals.png",width = 800, height = 400)
 par(mfrow = c(1,2))
 plot(ecdf(p_vals_screen),xlim = c(0, 1), ylim = c(0, 1))
 abline(0, 1, col = "red")
 
+
 #Plot a histogram of p_values under screening
 hist(p_vals_screen, main = "Histogram of p-values under screening")
-
+dev.off()
 
 #observe how small the norm_consts are, suggesting that eta_var is much smaller that sigma
 #norm_consts <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)$norm_consts

@@ -70,7 +70,7 @@ for (j in 1:dim(x)[2]){
 }
 
 #nsim = 20
-counter <- 0
+counter <- 400
 screening <- c()
 
 #This will contain all predictor p-values, which are truly inactive but where chosen in the selection event
@@ -78,6 +78,11 @@ screening <- c()
 p_vals_screen <- c()
 p_vals_noscreen <- c()
 target_number <- 3000
+# We could probably choose a smaller size as well, but this shouldn't be too
+# computationally expensive anyways
+# Note: set.seed(42) from line 57 for setting these seeds
+possible_seeds<-sample(x=1:100000, replace=FALSE, size=target_number)
+
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -91,7 +96,7 @@ while (p_val_screen_count < target_number){
       stop("Tried to many selection events and not one of them was conformable for beta_Drysdale")
     }
     select.again <- FALSE
-    set.seed(counter)
+    set.seed(possible_seeds[counter])
     counter <- counter + 1
     y <- y.true + sigma * rnorm(n)
     #Normalize y:
@@ -118,22 +123,25 @@ while (p_val_screen_count < target_number){
   if (counter-1==424){
     cat("using vector y:",y)
   }
-  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
-                           sigma=sigma, normalize_truncation_limits = FALSE)$pvals
   
-  sel.index <- which(beta_tmp != 0)
-  #check screening condition
-  if (all(act.index %in% sel.index)){
-    p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
-    p_val_screen_count <- length(p_vals_screen)
-    screening <- c(screening, TRUE)
-    
-  }
-  #if screening not successful skip the round
-  else{
-    screening <- c(screening, FALSE)
-    next
-  }
+  
+  
+  # p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
+  #                          sigma=sigma, normalize_truncation_limits = FALSE)$pvals
+  # 
+  # sel.index <- which(beta_tmp != 0)
+  # #check screening condition
+  # if (all(act.index %in% sel.index)){
+  #   p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
+  #   p_val_screen_count <- length(p_vals_screen)
+  #   screening <- c(screening, TRUE)
+  #   
+  # }
+  # #if screening not successful skip the round
+  # else{
+  #   screening <- c(screening, FALSE)
+  #   next
+  # }
   print(p_val_screen_count)
   
 }

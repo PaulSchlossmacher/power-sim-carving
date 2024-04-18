@@ -15,16 +15,7 @@
 carve.linear <- function(x, y, split, beta, lambda,
                          sigma=sigma, normalize_truncation_limits = FALSE){
   
-  #Normalize x and y before starting:
-  y<-(y-mean(y))
-  for (j in 1:dim(x)[2]){
-    xjbar<-mean(x[,j])
-    sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
-    for (i in 1:dim(x)[1]){
-      x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
-    }
-  }
-  
+
   #Split the data
   n <- length(y)
   p <- length(beta)
@@ -105,10 +96,10 @@ carve.linear <- function(x, y, split, beta, lambda,
     #Drysdale does not do so either
     ind.vup <- (den > 0)
     #The next line ensures that when calculating vup we only consider the cases where resid is positive
-    ind.vup <- which(ind.vup == TRUE)[which(resid[ind.vup]>0)]
+    #ind.vup <- which(ind.vup == TRUE)[which(resid[ind.vup]>0)]
     ind.vlo <- (den < 0)
     #Same here for vlo, this is important for vlo to be smaller than vup
-    ind.vlo <- which(ind.vlo == TRUE)[which(resid[ind.vlo]>0)]
+    #ind.vlo <- which(ind.vlo == TRUE)[which(resid[ind.vlo]>0)]
     ind.v0 <- (den == 0)
     if (any(ind.vup)){
       vup[i] <- min(resid[ind.vup]/den[ind.vup])

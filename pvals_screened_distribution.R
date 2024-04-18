@@ -60,6 +60,15 @@ y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 1.2
 
+#Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
+for (j in 1:dim(x)[2]){
+  xjbar<-mean(x[,j])
+  sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
+  for (i in 1:dim(x)[1]){
+    x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
+  }
+}
+
 #nsim = 20
 counter <- 0
 screening <- c()
@@ -68,7 +77,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 300
+target_number <- 3000
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -85,6 +94,9 @@ while (p_val_screen_count < target_number){
     set.seed(counter)
     counter <- counter + 1
     y <- y.true + sigma * rnorm(n)
+    #Normalize y:
+    y<-(y-mean(y))
+    
     split.select.list <- split.select(x,y,fraction = fraq)
     beta_tmp <- split.select.list$beta
     
@@ -102,7 +114,10 @@ while (p_val_screen_count < target_number){
     }
     
   }
-  
+  cat("seed was set to value",counter-1)
+  if (counter-1==424){
+    cat("using vector y:",y)
+  }
   p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
                            sigma=sigma, normalize_truncation_limits = FALSE)$pvals
   

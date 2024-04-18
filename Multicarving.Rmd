@@ -243,6 +243,27 @@ However even though we now have reasonable values for the truncation limits, our
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals.png")
 ```
 
+## Meeting Christoph, 18th April
+
+We discussed the problem regarding $V^->V^+$ encounters. He managed to simplify the problem to not fulfilled constraints $Ay < b$. This meant that our code did not perform the same calculations to find $A$ and $b$ as the function constraint.checker used in split_select. We also found that $Ac$ for 
+\begin{align*}
+  c = \Sigma \eta(\eta^T\Sigma \eta)^{-1}
+\end{align*}
+should in theory contain only zeros at the entries, where $A_0$ is inside of $A$. This is due to $c$ being aligned with $\eta$ and hence $(I-P_M)\eta=0$ leading to
+\begin{align*}
+  A_0c = \frac{1}{\lambda} 
+  \bigg(\begin{array}{c}
+    X_{-M}^T(I-P_M) \\
+    -X_{-M}^T(I-P_M)
+  \end{array}\bigg)c = 0
+\end{align*}
+This meant that due to numerical errors, $A_0c$ had very small but not exactly zero entries, making some of our $V^-$,$V^+$ calculations explode without being noticed. We agreed that it makes sense to leave $A_0$ out of the calculations as it should in theory hold that $(X_{A,M_A}^+Y | A_1Y \leq b_1) \perp (A_0Y \leq b_0)$(See Multicarving paper)
+We discussed how to use the browser() command for debugging. It breaks the code at the point where it was inserted and lets the user examine the variables inside of the targeted function. We left the meeting with the goal to find the mismatch between our $A$, $b$ calculations with the code from constraint.checker.
+
+### After Meeting
+* Found mismatch due to normalization of the data after the selection: In carve_linear we had a normalization of $X$ and $y$ at the beginning, whereas split.select was called directly in pvals_screened_distribution on the unnormalized $X$ and $y$. This led to entirely different base components in our calculation of $A$ and $b$, which in turn led to invalid constraints at the end.
+* We now do not have any invalid constraints anymore and no incidents of $V^->V^+$
+* The distribution of p-values of truly inactive coefficients given screening is still not a perfectly uniform distribution, but we are getting very close.
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

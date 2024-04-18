@@ -42,23 +42,45 @@ source(carve_linear_path)
 
 
 #-------------------- Toeplitz Carving simulation from Christoph ----------------------
+# n <- 100
+# p <- 200
+# rho <- 0.6
+# fraq = 0.7
+# #fraq.vec <- c(0.7)
+# #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
+# Cov <- toeplitz(rho ^ (seq(0, p - 1)))
+# #More active variables than observations in Group B after the split:
+# act.index <- c(1, 5, 10, 15, 20)#active predictors
+# beta <- rep(0, p)
+# beta[act.index] <- 1
+# sparsity <- 5
+# set.seed(42) 
+# x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
+# y.true <- x %*% beta
+# SNR <- 1.713766 # value created for Toeplitz 0.6
+# sigma <- 1.2
+
+# ------------- Different set of parameters for testing the behaviour: -------------
+
 n <- 100
 p <- 200
-rho <- 0.6
+rho <- 0.7
 fraq = 0.7
 #fraq.vec <- c(0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
-act.index <- c(1, 5, 10, 15, 20)#active predictors
+act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45)#active predictors
 beta <- rep(0, p)
 beta[act.index] <- 1
-sparsity <- 5
-set.seed(42) 
+#sparsity <- 5
+set.seed(1) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma <- 1.2
+sigma <- 2
+
+# --------------------------------------------------------
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
@@ -77,7 +99,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 10000
+target_number <- 1000
 # We could probably choose a smaller size as well, but this shouldn't be too
 # computationally expensive anyways
 # Note: set.seed(42) from line 57 for setting these seeds

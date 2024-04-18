@@ -155,6 +155,12 @@ carve.linear <- function(x, y, split, beta, lambda,
                 c1=c1,
                 c2=c2)
   
+  #Give warning if A_1%*%y_A>b_1:
+  if (any(A%*%y.a>b)) {
+    warning("A.1%*%y.a>b.1, conditioning is not fulfilled")
+    browser()
+  }
+  
   #Inserted this to check for direction of pvals, if the sign of beta_select is negative, we take cdf
   #to be the pv, else we take 1-cdf(line 319 in _lasso.py from Drysdales code)
   #pv <- ifelse(neg_mask, cdf, 1-cdf)
@@ -162,6 +168,8 @@ carve.linear <- function(x, y, split, beta, lambda,
   pv <- 2*pmin(cdf, 1-cdf)
   pvals <- rep(1,p)
   pvals[chosen] <- pv
+  
+
   
   #Give warnings if we have pvals outside of [0,1]
   out_of_range_pvals <- pvals[pvals < 0 | pvals > 1]

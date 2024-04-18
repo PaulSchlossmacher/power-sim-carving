@@ -77,7 +77,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 3000
+target_number <- 10000
 # We could probably choose a smaller size as well, but this shouldn't be too
 # computationally expensive anyways
 # Note: set.seed(42) from line 57 for setting these seeds
@@ -136,7 +136,7 @@ while (p_val_screen_count < target_number){
     screening <- c(screening, FALSE)
     next
   }
-  cat("Current number of obtained p-values is:", p_val_screen_count)
+  cat("Current number of obtained p-values is:", p_val_screen_count, "\n")
 
 }
 cat("We had ", sum(screening), " successful screenings out of ", rounds, " simulations.")

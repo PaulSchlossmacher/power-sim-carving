@@ -266,7 +266,7 @@ We discussed how to use the browser() command for debugging. It breaks the code 
 * The distribution of p-values of truly inactive coefficients given screening is still not a perfectly uniform distribution, but we are getting very close, see figure 6.
 
 ```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
-knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000).png")
+knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=10000).png")
 ```
 
 

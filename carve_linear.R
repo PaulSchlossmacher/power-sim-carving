@@ -71,8 +71,10 @@ carve.linear <- function(x, y, split, beta, lambda,
   A.1 <- -diag(x = b.signs, nrow = s) %*% x.Ma.i # (s x n.a)
   b.1 <- -lambda*diag(x = b.signs, nrow = s) %*% C %*% b.signs#Here Christoph differentiates for intercept
   
-  A <- rbind(A.0, A.1)# (2p-s) x n.a
-  b <- rbind(b.0,b.1)
+  #A <- rbind(A.0, A.1)# (2p-s) x n.a
+  #b <- rbind(b.0,b.1)
+  A <- A.1
+  b <- b.1
   
   #Following a mix of Lee (https://github.com/selective-inference/R-software/blob/master/selectiveInference/R/funs.fixed.R) from line 231
   #and Drysdale (https://github.com/ErikinBC/sntn/blob/main/sntn/_lasso.py) from line 195

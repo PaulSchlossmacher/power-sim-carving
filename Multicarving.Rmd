@@ -263,7 +263,12 @@ We discussed how to use the browser() command for debugging. It breaks the code 
 ### After Meeting
 * Found mismatch due to normalization of the data after the selection: In carve_linear we had a normalization of $X$ and $y$ at the beginning, whereas split.select was called directly in pvals_screened_distribution on the unnormalized $X$ and $y$. This led to entirely different base components in our calculation of $A$ and $b$, which in turn led to invalid constraints at the end.
 * We now do not have any invalid constraints anymore and no incidents of $V^->V^+$
-* The distribution of p-values of truly inactive coefficients given screening is still not a perfectly uniform distribution, but we are getting very close.
+* The distribution of p-values of truly inactive coefficients given screening is still not a perfectly uniform distribution, but we are getting very close, see figure 6.
+
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000).png")
+```
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

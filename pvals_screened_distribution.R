@@ -70,7 +70,7 @@ for (j in 1:dim(x)[2]){
 }
 
 #nsim = 20
-counter <- 400
+counter <- 1
 screening <- c()
 
 #This will contain all predictor p-values, which are truly inactive but where chosen in the selection event
@@ -119,31 +119,25 @@ while (p_val_screen_count < target_number){
     }
     
   }
-  cat("seed was set to value",counter-1)
-  if (counter-1==424){
-    cat("using vector y:",y)
+  
+  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
+                           sigma=sigma, normalize_truncation_limits = FALSE)$pvals
+
+  sel.index <- which(beta_tmp != 0)
+  #check screening condition
+  if (all(act.index %in% sel.index)){
+    p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
+    p_val_screen_count <- length(p_vals_screen)
+    screening <- c(screening, TRUE)
+
   }
-  
-  
-  
-  # p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
-  #                          sigma=sigma, normalize_truncation_limits = FALSE)$pvals
-  # 
-  # sel.index <- which(beta_tmp != 0)
-  # #check screening condition
-  # if (all(act.index %in% sel.index)){
-  #   p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
-  #   p_val_screen_count <- length(p_vals_screen)
-  #   screening <- c(screening, TRUE)
-  #   
-  # }
-  # #if screening not successful skip the round
-  # else{
-  #   screening <- c(screening, FALSE)
-  #   next
-  # }
-  print(p_val_screen_count)
-  
+  #if screening not successful skip the round
+  else{
+    screening <- c(screening, FALSE)
+    next
+  }
+  cat("Current number of obtained p-values is:", p_val_screen_count)
+
 }
 cat("We had ", sum(screening), " successful screenings out of ", rounds, " simulations.")
 png("histogram_and_cdf_of_screened_pvals.png",width = 800, height = 400)

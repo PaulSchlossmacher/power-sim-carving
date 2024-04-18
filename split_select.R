@@ -23,9 +23,7 @@ split.select <- function(x,y,fraction = 0.9, family = "gaussian",model.selector 
     y.left <- y[split]
     x.right <- x[-split, ]
     y.right <- y[-split]
-    
-    output <- do.call(model.selector, args = c(list(x = x.left, 
-                                                    y = y.left), args.model.selector))
+    output <- do.call(model.selector, args = c(list(x = x.left, y = y.left), args.model.selector))
     sel.model <- output$sel.model
     beta <- output$beta
     lambda <- output$lambda

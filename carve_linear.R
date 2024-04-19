@@ -56,6 +56,9 @@ carve.linear <- function(x, y, split, beta, lambda,
   p.Ma <- x.Ma %*% x.Ma.i#(n.a x n.a)
   
   #compute the beta_carve from drysdales paper
+  beta_split<-x.Mb.i %*% y.b
+  beta_posi<-x.Ma.i %*% y.a
+  
   beta_carve_D <- ((n.a/n)*x.Ma.i %*% y.a + (n.b/n)*x.Mb.i %*% y.b)
   
   #Get inactive affine constraints on split A, as this is the group where we are doing POSI(Lee et al. page 8)
@@ -182,5 +185,5 @@ carve.linear <- function(x, y, split, beta, lambda,
   
   return(list(pvals=pvals, norm_consts=norm_consts, beta_carve_D = beta_carve_D, tau.1 = tau.1,
               tau.2 = tau.2, vlo = vlo, vup = vup, c1=c1, c2=c2, x.Ma.i=x.Ma.i, x.Mb.i=x.Mb.i,
-              y.a=y.a, y.b=y.b))
+              y.a=y.a, y.b=y.b, beta_split=beta_split, beta_posi=beta_posi))
 }

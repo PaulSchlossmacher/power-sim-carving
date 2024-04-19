@@ -271,21 +271,43 @@ knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constra
 
 * Update, evening: We now also ran the same code as above for changed parameters in the toeplitz example. Namely:
 
-** rho <- 0.7 instead of 0.6
+    * rho <- 0.7 instead of 0.6
 
-** act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
+    * act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
 
-** set.seed(1) instead of 42
+    * set.seed(1) instead of 42
 
-** sigma <- 2 instead of 1.2
+    * sigma <- 2 instead of 1.2
 
 * Unfortunately this yielded about as bad a result as far as the distribution is concerned as we had before. A positive note is that it seems like the conditioning events still held, i.e. we did not get a warning that $Ay>b$.
 
-```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup under new parameters."}
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
 ```
 
+## Email Christoph, April 19th
 
+Responding to the issues outlined above, Christoph mentions the following:
+
+* Also the first more promising plot still should be more uniform
+
+* We should check how we're estimating $\tau_M$ - This is already implemented in the code as the true variance, so here there shouldn't be any issues.
+
+* Check the distribution of $\hat\beta^{Split}$ or $\hat\beta^{Posi}$
+
+* We should check the distribution of p-values when only using $\hat\beta^{Split}$ or $\hat\beta^{Posi}$. Maybe only one of the two makes problems.
+
+## Paul Saturday, April 20th:
+
+Looked at the distribution of $\hat \beta^{Split}$ and $\hat \beta^{Posi}$: I still have to think again about which coefficients we should actually observe here, but I got these two plots that are bimodal around 0 and 1:
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_split whole, s=1143.png")
+```
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
+```
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

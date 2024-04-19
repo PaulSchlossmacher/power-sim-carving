@@ -271,17 +271,17 @@ knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constra
 
 * Update, evening: We now also ran the same code as above for changed parameters in the toeplitz example. Namely:
 
-** rho <- 0.7 instead of 0.6
+    * rho <- 0.7 instead of 0.6
 
-** act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
+    * act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
 
-** set.seed(1) instead of 42
+    * set.seed(1) instead of 42
 
-** sigma <- 2 instead of 1.2
+    * sigma <- 2 instead of 1.2
 
 * Unfortunately this yielded about as bad a result as far as the distribution is concerned as we had before. A positive note is that it seems like the conditioning events still held, i.e. we did not get a warning that $Ay>b$.
 
-```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup under new parameters."}
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
 ```
 

@@ -46,8 +46,8 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-fraq.vec <- c(0.7)
-#fraq.vec <- c(0.5,0.6,0.7)
+#fraq.vec <- c(0.7)
+fraq.vec <- c(0.5,0.6,0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -60,7 +60,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 3
+nsim <- 30
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
@@ -97,6 +97,7 @@ for (fraq_ind in 1:f){
     print(i)
     #get different selection events
     select.again <- TRUE
+    empty_model <- FALSE
     select.again.counter = 0
     while(select.again){
       if (select.again.counter > 200){
@@ -111,9 +112,10 @@ for (fraq_ind in 1:f){
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
-        #TODO:set entries of power and type 1 error vectors to NA if no variables where selected?? and skip round with "next"
-        #Christoph sets his p-values just all to 1 if the model is empty
-        select.again <- TRUE
+        #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
+        empty_model <- TRUE
+        p_vals_D_fwer <- rep(1,p)
+        p_vals_C_fwer <- rep(1,p)
         print("0 variables where chosen by the lasso, repeating selection")
       }
       lambda <- split.select.list$lambda
@@ -125,25 +127,26 @@ for (fraq_ind in 1:f){
       }
     }
     
-    #print("calculating Drysdales p-values")
-    carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
-    p_vals_D_nofwer <- carve_D$pvals
-  
+    if(!empty_model){
+      #print("calculating Drysdales p-values")
+      carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+      p_vals_D_nofwer <- carve_D$pvals
     
-    #print("calculating Christophs p-values")
-    carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
-                           lambda = lambda, intercept = FALSE,selected=TRUE, verbose = FALSE)
-    
-    #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
-    p_vals_C_nofwer<-carve_C$pv
-    p_vals_comp_C<-rep(1,p)
-    chosen <- which(abs(beta_tmp)>0)
-    p_vals_comp_C_nofwer[chosen] <- p_vals_C
-    
-    #Add FWER control
-    model.size <- length(chosen)
-    p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
-    p_vals_C_fwer <- pmin(p_vals_comp_C_nofwer * model.size, 1)
+      #print("calculating Christophs p-values")
+      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                             lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+      p_vals_C_nofwer<-carve_C$pv
+      
+      #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+      p_vals_comp_C<-rep(1,p)
+      chosen <- which(abs(beta_tmp)>0)
+      p_vals_comp_C[chosen] <- p_vals_C_nofwer
+      
+      #Add FWER control
+      model.size <- length(chosen)
+      p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+      p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+    }
     
     #false positives, true positives, true negatives, false negatives for Drysdales p-values
     H0T_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==0)

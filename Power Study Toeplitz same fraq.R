@@ -101,10 +101,9 @@ for (fraq_ind in 1:f){
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
-        #TODO:set entries of 
-        next
-        #select.again <- TRUE
-        #print("0 variables where chosen by the lasso, repeating selection")
+        #TODO:set entries of power and type 1 error vectors to NA if no variables where selected?? and skip round with "next"
+        select.again <- TRUE
+        print("0 variables where chosen by the lasso, repeating selection")
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
@@ -195,7 +194,7 @@ for (fraq_ind in 1:f){
   #collecting fails of drysdales estimator of one fraction 
   drysdale.fails[fraq_ind] <- counter - nsim
 }
-#TODO:implement drysdale failed select counter on all fraq
+
 #save.image(file='myEnvironment.RData')
 #load('myEnvironment.RData')
 

@@ -315,6 +315,7 @@ knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
 ```
 
 
+
 ## Paul and Filip Sunday, April 21st
 
 * We agreed that the distributions of the different entries of $\beta^{Split}$ and $\beta^{Posi}$ are all different and that testing for their collection to follow a multivariate normal distribution might be computationally involved and would take some time to set up.

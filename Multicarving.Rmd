@@ -285,7 +285,37 @@ knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constra
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
 ```
 
+## Email Christoph, April 19th
 
+Responding to the issues outlined above, Christoph mentions the following:
+
+* Also the first more promising plot still should be more uniform
+
+* We should check how we're estimating $\tau_M$ - This is already implemented in the code as the true variance, so here there shouldn't be any issues.
+
+* Check the distribution of $\hat\beta^{Split}$ or $\hat\beta^{Posi}$
+
+* We should check the distribution of p-values when only using $\hat\beta^{Split}$ or $\hat\beta^{Posi}$. Maybe only one of the two makes problems.
+
+## Paul Saturday, April 20th:
+
+I looked into the distribution of $\hat \beta^{Split}$ and $\hat \beta^{Posi}$: 
+
+First I tried doing this, by building an analogue to the pvals_screened_distribution.R file, where I just concatenated all the different $\hat \beta^{Split}$ and $\hat \beta^{Posi}$ together into one big vector. However I then realised that I don't think that there are actually any guarantees then for either one to be normally distributed. I tested this with an rnorm simulation, where the result also ended up non-normal. This attempt can be found in the beta_hats_distribution_failed_test.R file, which I did not want to delete yet, however I moved it to "old_files".
+
+I then went on to pursue the same goal by just running a similar Toeplitz simulation to before, however with many more parameters, i.e. $n=5000, p=6000, s=350$. This took about 45 minutes to run, so I saved the results in the "Simulation Distribution beta_split and beta_posi.RData" file to be downloaded again in case we want to check it again.
+I still have to think again about which coefficients we should actually observe here, but I got these two plots that are bimodal around 0 and 1:
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_split whole, s=1143.png")
+```
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
+```
+
+
+Test
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

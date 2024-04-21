@@ -13,7 +13,7 @@
 #' as the norms of the directions of interest during the computation of the truncation limits
 
 carve.linear <- function(x, y, split, beta, lambda,
-                         sigma=sigma, normalize_truncation_limits = FALSE){
+                         sigma, normalize_truncation_limits = FALSE){
   
 
   #Split the data
@@ -186,4 +186,44 @@ carve.linear <- function(x, y, split, beta, lambda,
   return(list(pvals=pvals, norm_consts=norm_consts, beta_carve_D = beta_carve_D, tau.1 = tau.1,
               tau.2 = tau.2, vlo = vlo, vup = vup, c1=c1, c2=c2, x.Ma.i=x.Ma.i, x.Mb.i=x.Mb.i,
               y.a=y.a, y.b=y.b, beta_split=beta_split, beta_posi=beta_posi))
+}
+
+beta.split <- function(x, y, split, beta, sigma){
+  
+  #Split the data
+  n <- length(y)
+  p <- length(beta)
+  n.a <- length(split)
+  n.b <- n-n.a
+  #x.a <- x[split, ]
+  #y.a <- y[split, ]
+  x.b <- x[-split, ]
+  y.b <- y[-split, ]
+  sigma_squ <- sigma
+
+  
+  chosen <-  which(abs(beta) > 0) # selected variables
+  s <- length(chosen)
+
+  if (s == 0)
+    stop("0 variables were chosen by the Lasso")
+  
+  #extract active variables from split B
+  x.Mb <- x.b[, chosen]#(n.b x s)
+  
+  #compute the moore penrose inverse of active variables in split B
+  x.Mb.i <- ginv(x.Mb)
+  
+  #compute the beta_split
+  beta_split<-x.Mb.i %*% y.b
+  #beta_split/
+  
+  var_vector <- sigma_squ*diag(solve(t(x.Mb)%*%x.Mb))
+  pvals <- rep(1,p)
+  for (i in 1:s){
+    cdf <- pnorm(beta_split[i],mean = 0, sd = sqrt(var_vector[i]))
+    pv <- 2*min(cdf, 1-cdf)
+    pvals[chosen[i]] <- pv
+  }
+  return(list(beta_split = beta_split, var_vector = var_vector, pvals_split = pvals))
 }

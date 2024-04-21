@@ -60,8 +60,18 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-
 nsim <- 3
+
+#Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
+for (j in 1:dim(x)[2]){
+  xjbar<-mean(x[,j])
+  sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
+  for (i in 1:dim(x)[1]){
+    x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
+  }
+}
+
+#Initialization of metrics we want to keep track of
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
@@ -69,13 +79,11 @@ full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
-
 #Should count fails of drysdales estimator for a given fraction over nsim rounds
 drysdale.fails <- rep(0,f)
 
 for (fraq_ind in 1:f){
-
-
+  
   test_res_D <- rep(0,4)
   test_res_C <- rep(0,4)
   counter <- 0
@@ -98,10 +106,13 @@ for (fraq_ind in 1:f){
       set.seed(counter)
       counter <- counter + 1
       y <- y.true + sqrt(sigma_squ) * rnorm(n)
+      #Normalize y:
+      y<-(y-mean(y))
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
         #TODO:set entries of power and type 1 error vectors to NA if no variables where selected?? and skip round with "next"
+        #Christoph sets his p-values just all to 1 if the model is empty
         select.again <- TRUE
         print("0 variables where chosen by the lasso, repeating selection")
       }
@@ -116,27 +127,35 @@ for (fraq_ind in 1:f){
     
     #print("calculating Drysdales p-values")
     carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
-    p_vals_D <- carve_D$pvals
-    
-    #false positives, true positives, true negatives, false negatives for Drysdales p-values
-    H0T_Rej_D<-sum(p_vals_D<=0.05 & beta==0)
-    H0F_Rej_D<-sum(p_vals_D<=0.05 & beta==1)
-    H0T_N_Rej_D<-sum(p_vals_D>0.05 & beta==0)
-    H0F_N_Rej_D<-sum(p_vals_D>0.05 & beta==1)
+    p_vals_D_nofwer <- carve_D$pvals
+  
     
     #print("calculating Christophs p-values")
     carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
                            lambda = lambda, intercept = FALSE,selected=TRUE, verbose = FALSE)
-    p_vals_C<-carve_C$pv
+    
+    #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+    p_vals_C_nofwer<-carve_C$pv
     p_vals_comp_C<-rep(1,p)
-    chosen_C <- which(abs(beta_tmp)>0)
-    p_vals_comp_C[chosen_C] <- p_vals_C
+    chosen <- which(abs(beta_tmp)>0)
+    p_vals_comp_C_nofwer[chosen] <- p_vals_C
+    
+    #Add FWER control
+    model.size <- length(chosen)
+    p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+    p_vals_C_fwer <- pmin(p_vals_comp_C_nofwer * model.size, 1)
     
     #false positives, true positives, true negatives, false negatives for Drysdales p-values
-    H0T_Rej_C<-sum(p_vals_comp_C<=0.05 & beta==0)
-    H0F_Rej_C<-sum(p_vals_comp_C<=0.05 & beta==1)
-    H0T_N_Rej_C<-sum(p_vals_comp_C>0.05 & beta==0)
-    H0F_N_Rej_C<-sum(p_vals_comp_C>0.05 & beta==1)
+    H0T_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==0)
+    H0F_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==1)
+    H0T_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==0)
+    H0F_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==1)
+    
+    #false positives, true positives, true negatives, false negatives for Christoph's p-values
+    H0T_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==0)
+    H0F_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==1)
+    H0T_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==0)
+    H0F_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==1)
 
     #Collecting terms
     test_res_D<-test_res_D + c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)

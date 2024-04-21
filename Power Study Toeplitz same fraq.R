@@ -46,8 +46,8 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-#fraq = 0.7
-fraq.vec <- c(0.5,0.6,0.7)
+fraq.vec <- c(0.7)
+#fraq.vec <- c(0.5,0.6,0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -59,9 +59,9 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
+sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
 
-nsim <- 30
+nsim <- 3
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
@@ -91,18 +91,20 @@ for (fraq_ind in 1:f){
     select.again <- TRUE
     select.again.counter = 0
     while(select.again){
-      if (select.again.counter > 50){
+      if (select.again.counter > 200){
         stop("Tried to many selection events and not one of them was conformable for beta_Drysdale")
       }
       select.again <- FALSE
       set.seed(counter)
       counter <- counter + 1
-      y <- y.true + sigma * rnorm(n)
+      y <- y.true + sqrt(sigma_squ) * rnorm(n)
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
-        select.again <- TRUE
-        print("0 variables where chosen by the lasso, repeating selection")
+        #TODO:set entries of 
+        next
+        #select.again <- TRUE
+        #print("0 variables where chosen by the lasso, repeating selection")
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
@@ -114,7 +116,8 @@ for (fraq_ind in 1:f){
     }
     
     #print("calculating Drysdales p-values")
-    p_vals_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq.vec[fraq_ind],sigma=sigma)
+    carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+    p_vals_D <- carve_D$pvals
     
     #false positives, true positives, true negatives, false negatives for Drysdales p-values
     H0T_Rej_D<-sum(p_vals_D<=0.05 & beta==0)
@@ -123,7 +126,7 @@ for (fraq_ind in 1:f){
     H0F_N_Rej_D<-sum(p_vals_D>0.05 & beta==1)
     
     #print("calculating Christophs p-values")
-    carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
+    carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
                            lambda = lambda, intercept = FALSE,selected=TRUE, verbose = FALSE)
     p_vals_C<-carve_C$pv
     p_vals_comp_C<-rep(1,p)

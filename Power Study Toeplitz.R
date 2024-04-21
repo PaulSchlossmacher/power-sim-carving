@@ -57,7 +57,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-y <- y.true + sigma * rnorm(n)
+y <- y.true + sqrt(sigma) * rnorm(n)
 
 # Tried normal glmnet Lasso just to see whether screening works on the full sample:
 # It does.

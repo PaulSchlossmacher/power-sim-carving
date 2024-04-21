@@ -322,9 +322,9 @@ knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
 * Hence we proceeded to implement two additional functions inside carve_linear, which compute the p-values of $\beta^{Split}$ and $\beta{Posi}$ respectively to see how they perform in our p_vals_screened simulation. Here we found a much larger deviation from the uniform distribution for the p-values of the truly inactive coefficients of $\beta^{Split}$. This was intriguing as we expected this to be at least correct. The search for the mistake now led us the beginning of our data generation. We found that our sigma is in fact meant to be the variance, but we defined 
 
 \begin{align*}
-  y = X\beta_0 + \sigma * \epsilon
+  y = X\beta_0 + \sigma \epsilon
 \end{align*}
-for some epsilon following the standard distribution. Unfortunately this \sigma has to be the standard deviation, so just inserting a square root at this data generation step resolved our problems and we now finally have uniform p-values under screening as in figure ?
+for some epsilon following the standard normal distribution. Unfortunately this $\sigma$ has to be the standard deviation, so just inserting a square root at this data generation step resolved our problems and we now finally have uniform p-values under screening as in figure ?
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

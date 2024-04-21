@@ -326,6 +326,12 @@ knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
 \end{align*}
 for some epsilon following the standard normal distribution. Unfortunately this $\sigma$ has to be the standard deviation, so just inserting a square root at this data generation step resolved our problems and we now finally have uniform p-values under screening as in figure ?
 
+* In the case where the selected model is empty, we just set all the p-values to 1, as is done in hdi_adjustments line 322.
+
+
+## Questions
+* We don't set FWER = True in carve.lasso but perform a bonferroni correction directly in the simulation. What happens exactly if FWER = True is passed as an argument to carve.lasso? Because it first lowers the sig.level by the model.size and then uses this sig.level to determine if the chain for sampling from constraints will be longer. So what is this about?
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

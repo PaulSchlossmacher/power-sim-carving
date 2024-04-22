@@ -271,21 +271,60 @@ knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constra
 
 * Update, evening: We now also ran the same code as above for changed parameters in the toeplitz example. Namely:
 
-** rho <- 0.7 instead of 0.6
+    * rho <- 0.7 instead of 0.6
 
-** act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
+    * act.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45) instead of c(1, 5, 10, 15, 20)
 
-** set.seed(1) instead of 42
+    * set.seed(1) instead of 42
 
-** sigma <- 2 instead of 1.2
+    * sigma <- 2 instead of 1.2
 
 * Unfortunately this yielded about as bad a result as far as the distribution is concerned as we had before. A positive note is that it seems like the conditioning events still held, i.e. we did not get a warning that $Ay>b$.
 
-```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup."}
+```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup under new parameters."}
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
 ```
 
+## Email Christoph, April 19th
 
+Responding to the issues outlined above, Christoph mentions the following:
+
+* Also the first more promising plot still should be more uniform
+
+* We should check how we're estimating $\tau_M$ - This is already implemented in the code as the true variance, so here there shouldn't be any issues.
+
+* Check the distribution of $\hat\beta^{Split}$ or $\hat\beta^{Posi}$
+
+* We should check the distribution of p-values when only using $\hat\beta^{Split}$ or $\hat\beta^{Posi}$. Maybe only one of the two makes problems.
+
+## Paul Saturday, April 20th:
+
+I looked into the distribution of $\hat \beta^{Split}$ and $\hat \beta^{Posi}$: 
+
+First I tried doing this, by building an analogue to the pvals_screened_distribution.R file, where I just concatenated all the different $\hat \beta^{Split}$ and $\hat \beta^{Posi}$ together into one big vector. However I then realised that I don't think that there are actually any guarantees then for either one to be normally distributed. I tested this with an rnorm simulation, where the result also ended up non-normal. This attempt can be found in the beta_hats_distribution_failed_test.R file, which I did not want to delete yet, however I moved it to "old_files".
+
+I then went on to pursue the same goal by just running a similar Toeplitz simulation to before, however with many more parameters, i.e. $n=5000, p=6000, s=350$. This took about 45 minutes to run, so I saved the results in the "Simulation Distribution beta_split and beta_posi.RData" file to be downloaded again in case we want to check it again.
+I still have to think again about which coefficients we should actually observe here, but I got these two plots that are bimodal around 0 and 1:
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_split whole, s=1143.png")
+```
+
+```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of beta_split for s=1143"}
+knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
+```
+
+
+
+## Paul and Filip Sunday, April 21st
+
+* We agreed that the distributions of the different entries of $\beta^{Split}$ and $\beta^{Posi}$ are all different and that testing for their collection to follow a multivariate normal distribution might be computationally involved and would take some time to set up.
+* Hence we proceeded to implement two additional functions inside carve_linear, which compute the p-values of $\beta^{Split}$ and $\beta{Posi}$ respectively to see how they perform in our p_vals_screened simulation. Here we found a much larger deviation from the uniform distribution for the p-values of the truly inactive coefficients of $\beta^{Split}$. This was intriguing as we expected this to be at least correct. The search for the mistake now led us the beginning of our data generation. We found that our sigma is in fact meant to be the variance, but we defined 
+
+\begin{align*}
+  y = X\beta_0 + \sigma \epsilon
+\end{align*}
+for some epsilon following the standard normal distribution. Unfortunately this $\sigma$ has to be the standard deviation, so just inserting a square root at this data generation step resolved our problems and we now finally have uniform p-values under screening as in figure ?
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

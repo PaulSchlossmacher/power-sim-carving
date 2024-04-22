@@ -47,7 +47,7 @@ n <- 100
 p <- 200
 rho <- 0.6
 #fraq.vec <- c(0.7)
-fraq.vec <- c(0.5,0.6,0.7)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -60,7 +60,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 30
+nsim <- 200
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
@@ -217,7 +217,7 @@ for (fraq_ind in 1:f){
   drysdale.fails[fraq_ind] <- counter - nsim
 }
 
-#save.image(file='myEnvironment.RData')
+#save.image(file='myEnvironment_nsim200_6fraqs.RData')
 #load('myEnvironment.RData')
 
 

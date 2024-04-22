@@ -142,10 +142,11 @@ while (beta_split_count < target_number){
     
   }
   
-  beta_split<-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
-                           sigma=sigma, normalize_truncation_limits = FALSE)$beta_split
-  beta_posi<-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
-                           sigma=sigma, normalize_truncation_limits = FALSE)$beta_posi
+  result_carve.linear<-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,
+                                    sigma=sigma, normalize_truncation_limits = FALSE)
+  
+  beta_split<-result_carve.linear$beta_split
+  beta_posi<-result_carve.linear$beta_posi
   
   
   sel.index <- which(beta_tmp != 0)

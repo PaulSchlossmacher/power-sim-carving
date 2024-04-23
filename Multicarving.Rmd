@@ -1,9 +1,11 @@
-
 ---
 title: "Multicarving"
 author: "Filip Ilic & Paul Schlossmacher"
 date: "2024-03-13"
-output: pdf_document
+output: 
+  pdf_document:
+    extra_dependencies:
+      - subfig
 ---
 
 ```{r setup, include=FALSE}
@@ -191,7 +193,7 @@ knitr::include_graphics("plots/wrong plots/QQ_plots_without_normalization.png")
 ```
 
 ```{r, echo=FALSE,fig.cap="Histogram of p-values under screening obtained from carve.linear without normalization of truncation limits.", out.width = "450px"}
-knitr::include_graphics("plots/histogram_without_normalization.png")
+knitr::include_graphics("plots/wrong plots/histogram_without_normalization.png")
 ```
 
 
@@ -348,14 +350,32 @@ for some epsilon following the standard normal distribution. Unfortunately this 
 
 ## Summary of our results for meeting with Christoph:
 
-By exchanging $y=X\beta_0+\sigma^2\epsilon$ for $y=X\beta_0+\sigma\epsilon$ in the simulation setup we finally managed to get uniformly distributed p-values, which can be observed in \@ref(fig:Histo_pvals)
+By exchanging $y=X\beta_0+\sigma^2\epsilon$ for $y=X\beta_0+\sigma\epsilon$ in the simulation setup we finally managed to get uniformly distributed p-values, which can be observed below.
 
-```{r Histo_pvals, echo=FALSE,fig.cap="Empirical pdf of coefficients of $\\beta^{Split}$ for s=1143", out.width = "450px"}
+```{r Histo_pvals, echo=FALSE,fig.cap="Distribution p-values for $n=100, p=200, fraq=0.7, s=5, sigma=1.2$", out.width = "450px"}
 knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_N=3000.jpeg")
 ```
 
+By observing the plots under screening and non-screening as below we can also see that while the distribution seems to be correct under screening, it is not when that condition is not fulfilled:
 
-Now that the distribution of the p-values seemed to be correct.
+```{r ecdf_pvals_comp_screening, echo=FALSE,fig.cap="Distribution p-values for $n=100, p=200, fraq=0.7, s=5, sigma=1.9", out.width = "450px"}
+knitr::include_graphics("plots/ecdf_plots_screen_and_noscreen.png")
+```
+
+Now that the distribution of the p-values seemed to be correct, we took another look at the power and Type-I-Error simulations:
+
+\begin{figure}[htbp]
+\centering
+\subfloat[one plot]{
+  \includegraphics[width=0.49\linewidth]{plots/ecdf_plots_screen_and_noscreen.png}
+}
+\subfloat[the other one]{
+  \includegraphics[width=0.49\linewidth]{plots/ecdf_plots_screen_and_noscreen.png}
+}
+\caption{Distribution of p-values for $n=100, p=200, fraq=0.7, s=5, \sigma=1.9$}
+\label{fig:subfigures}
+\end{figure}
+
 
 ## Questions
 * We don't set FWER = True in carve.lasso but perform a Bonferroni correction directly in the simulation. What happens exactly if FWER = True is passed as an argument to carve.lasso? Because it first lowers the sig.level by the model.size and then uses this sig.level to determine if the chain for sampling from constraints will be longer. So what is this about?

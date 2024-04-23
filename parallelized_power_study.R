@@ -1,4 +1,3 @@
-
 #Trying to create a more extreme Toeplitz example with less noise to 
 #encourage Lasso to use more variables:
 # Clear all variables
@@ -27,6 +26,7 @@ library(hdi)
 library(selectiveInference)
 library(doSNOW)
 library(parallel)
+library(doParallel)
 library(doRNG)
 library(truncnorm)
 library(git2r)
@@ -47,8 +47,9 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-#fraq.vec <- c(0.7)
-fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
+fraq.vec <- c(0.5,0.6,0.7)
+#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
+#fraq.vec <- c(0.5,0.55,0.6)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -62,14 +63,27 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 200
+nsim <- 100
 
+total.time <- 0
+start.time <- Sys.time()
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
   xjbar<-mean(x[,j])
   sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
   for (i in 1:dim(x)[1]){
     x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
+  }
+}
+
+progress <- function(n, tag) {
+  mod <- 12
+  if (n %% mod == 0 ) {
+    cat(sprintf('tasks completed: %d; tag: %d\n', n, tag))
+  }
+  if (n %% mod == 0 ) {
+    toc()
+    tic()
   }
 }
 
@@ -83,19 +97,32 @@ full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
 #Should count fails of drysdales estimator for a given fraction over nsim rounds
 drysdale.fails <- rep(0,f)
+RNGkind("L'Ecuyer-CMRG")
+set.seed(42)
+seed.vec <- sample(1:10000, length(fraq.vec))
+seed.n <- 0
 
-for (fraq_ind in 1:f){
-  
-  test_res_D <- rep(0,4)
-  test_res_C <- rep(0,4)
+for(fraq_ind in  1:f){
+  seed.n <- seed.n + 1
+  set.seed(seed.vec[seed.n])
   counter <- 0
-  powers_D <- rep(0,nsim)
-  powers_C <- rep(0,nsim)
-  type1_error_D <- rep(0,nsim)
-  type1_error_C <- rep(0,nsim)
   
+  opts <- list(progress = progress)
+  cl<-makeSOCKcluster(12) 
+  rseed <- seed.vec[seed.n]
+  clusterSetRNGStream(cl, iseed = rseed) #make things reproducible
+  registerDoSNOW(cl)
   
-  for (i in 1:nsim){
+  tic()
+  results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
+                     .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
+                                  "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
+    test_res_D <- numeric(4)
+    test_res_C <- numeric(4)
+    powers_D <- numeric(1)
+    powers_C <- numeric(1)
+    type1_error_D <- numeric(1)
+    type1_error_C <- numeric(1)
     print(i)
     #get different selection events
     select.again <- TRUE
@@ -133,7 +160,7 @@ for (fraq_ind in 1:f){
       #print("calculating Drysdales p-values")
       carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
-    
+      
       #print("calculating Christophs p-values")
       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
@@ -161,25 +188,34 @@ for (fraq_ind in 1:f){
     H0F_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==1)
     H0T_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==0)
     H0F_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==1)
-
+    
     #Collecting terms
-    test_res_D<-test_res_D + c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
-    test_res_C<- test_res_C + c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
+    test_res_D<-c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
+    test_res_C<- c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
     #calculating power and type1 error for 1 round in simulation
-    powers_D[i] <- H0F_Rej_D/(length(sel.index))
-    powers_C[i] <- H0F_Rej_C/(length(sel.index))
-    type1_error_D[i] <- H0T_Rej_D/(p-length(sel.index))
-    type1_error_C[i] <- H0T_Rej_C/(p-length(sel.index))
+    powers_D <- H0F_Rej_D/(length(sel.index))
+    powers_C <- H0F_Rej_C/(length(sel.index))
+    type1_error_D <- H0T_Rej_D/(p-length(sel.index))
+    type1_error_C <- H0T_Rej_C/(p-length(sel.index))
+    
+    
+    list(test_res_D = test_res_D,
+         test_res_C = test_res_C,
+         powers_D = powers_D,
+         powers_C = powers_C,
+         type1_error_D = type1_error_D,
+         type1_error_C = type1_error_C)
     
   }
-  
-  #calculating averages over all rounds of one fraction
-  test_res_D_avg <- test_res_D/nsim
-  test_res_C_avg <- test_res_C/nsim
-  power_avg_D <- mean(powers_D)
-  power_avg_C <- mean(powers_C)
-  type1_error_avg_D <- mean(type1_error_D)
-  type1_error_avg_C <- mean(type1_error_C)
+  toc()
+  stopCluster(cl)
+  results <- as.data.frame(results)
+  test_res_D_avg <- colMeans(do.call(rbind, results$test_res_D))
+  test_res_C_avg <- colMeans(do.call(rbind, results$test_res_C))
+  power_avg_D <- mean(do.call(rbind, results$powers_D))
+  power_avg_C <- mean(do.call(rbind, results$powers_C))
+  type1_error_avg_D <- mean(do.call(rbind, results$type1_error_D))
+  type1_error_avg_C <- mean(do.call(rbind, results$type1_error_C))
   
   #Creating average confusion matrices obtained from one fraction
   Testing_table_D_avg <- matrix(
@@ -196,16 +232,16 @@ for (fraq_ind in 1:f){
     dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
   )
   #Printing results of one fraction to console
-  cat("Results for fraction", fraq.vec[fraq_ind], ":")
-  cat("The average confusion matrix of Drydales p-values over ", nsim, "calculations is: \n" )
+  cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
+  cat("The average confusion matrix of Drydales p-values over ", nsim, "calculations is: \n")
   print(Testing_table_D_avg)
-  cat("The average confusion matrix of Christoph's p-values over ", nsim, "calculations is: \n" )
+  cat("The average confusion matrix of Christoph's p-values over ", nsim, "calculations is: \n")
   print(Testing_table_C_avg)
   
-  cat("The average power of Drysdales p-values:", power_avg_D)
-  cat("The average power of Christophs p-values:", power_avg_C)
-  cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D)
-  cat("The average type 1 error of Christophs p-values:", type1_error_avg_C)
+  cat("The average power of Drysdales p-values:", power_avg_D, "\n")
+  cat("The average power of Christophs p-values:", power_avg_C,"\n")
+  cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
+  cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
   
   
   #Store everything to create plots later
@@ -217,7 +253,12 @@ for (fraq_ind in 1:f){
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
   #collecting fails of drysdales estimator of one fraction 
   drysdale.fails[fraq_ind] <- counter - nsim
+  
 }
+
+end.time <- Sys.time()
+total.time <- end.time - start.time
+cat("Total time needed for simulation:", total.time)
 
 #save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
 #load('myEnvironment.RData')
@@ -226,38 +267,37 @@ for (fraq_ind in 1:f){
 
 # --------------- Create plots --------------
 
-data_Power <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Power Christoph" = full_power_avg_C,
-  "Avg Power Drysdale" = full_power_avg_D
-)
-
-data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
-
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-  labs(title = "Average Power",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
-
-
-data_TypeI <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
-  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
-)
-
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
-
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-  labs(title = "Average Type I Error Rate",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
-
+# data_Power <- data.frame(
+#   Fraq=fraq.vec,
+#   "Avg Power Christoph" = full_power_avg_C,
+#   "Avg Power Drysdale" = full_power_avg_D
+# )
+#
+# data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+#
+# PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+#   geom_line() +
+#   labs(title = "Average Power",
+#        x = "Fraq", y = "Value") +
+#   theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+#
+# ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
+#
+#
+# data_TypeI <- data.frame(
+#   Fraq=fraq.vec,
+#   "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
+#   "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
+# )
+#
+# data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+#
+# TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
+#   geom_line() +
+#   labs(title = "Average Type I Error Rate",
+#        x = "Fraq", y = "Value") +
+#   theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+#
+# ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")

@@ -61,6 +61,15 @@ y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma <- 1.9 #Variance 1.9 instead of 2 before, to make screening about as often successful as not
 
+#Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
+for (j in 1:dim(x)[2]){
+  xjbar<-mean(x[,j])
+  sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
+  for (i in 1:dim(x)[1]){
+    x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
+  }
+}
+
 #nsim = 20
 counter <- 0
 screening <- c()
@@ -69,7 +78,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 200
+target_number <- 2000
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -85,7 +94,8 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     select.again <- FALSE
     set.seed(counter)
     counter <- counter + 1
-    y <- y.true + sigma * rnorm(n)
+    y <- y.true + sqrt(sigma) * rnorm(n)
+    y <- y - mean(y)
     split.select.list <- split.select(x,y,fraction = fraq)
     beta_tmp <- split.select.list$beta
     
@@ -104,7 +114,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     
   }
   
-  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, fraction = fraq,sigma=sigma)
+  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma=sigma)$pvals
   
   sel.index <- which(beta_tmp != 0)
   #check screening condition
@@ -146,21 +156,16 @@ cat("We had ", sum(screening), " successful screenings out of ", rounds, " simul
 print(length(p_vals_screen))
 print(length(p_vals_noscreen))
 
-#Create and save QQ-plots to see how well the p-values match a uniform distribution
-quantiles_uniform <- runif(target_number)
-png("QQ_plots.png",width = 800, height = 400)
-par(mfrow = c(1, 2))
-qqplot(quantiles_uniform, p_vals_screen[1:target_number],
-       xlab = "Theoretical Quantiles", ylab = "p_vals_screen", main = "QQ-Plot: P-values under screening")
-abline(0, 1, col = "red")
-
-
-qqplot(quantiles_uniform, p_vals_noscreen[1:target_number],
-       xlab = "Theoretical Quantiles", ylab = "p_vals_noscreen", main = "QQ-Plot: P-values without screening")
+#Create and save ecdf-plots to see how well the p-values match a uniform distribution
+png("ecdf_plots_screen_and_noscreen.png",width = 800, height = 400)
+par(mfrow = c(1,2))
+plot(ecdf(p_vals_screen),xlim = c(0, 1), ylim = c(0, 1), main = "P-values under screening(ecdf)")
+abline(0,1, col = "red")
+plot(ecdf(p_vals_noscreen),xlim = c(0, 1), ylim = c(0, 1), main = "P-values without screening(ecdf)")
 abline(0, 1, col = "red")
 dev.off()
 
-#Plot a histogram of p_values under screening
-png("histogram.png",width = 350, height = 300)
-hist(p_vals_screen, main = "Histogram of p-values under screening")
-dev.off()
+# #Plot a histogram of p_values under screening
+# png("histogram.png",width = 350, height = 300)
+# hist(p_vals_screen, main = "Histogram of p-values under screening")
+# dev.off()

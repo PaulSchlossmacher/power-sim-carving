@@ -231,7 +231,7 @@ beta.split <- function(x, y, split, beta, sigma){
 
 
 beta.posi <- function(x, y, split, beta, lambda,
-                      sigma=sigma, normalize_truncation_limits = FALSE){
+                      sigma, normalize_truncation_limits = FALSE){
   #Split the data
   n <- length(y)
   p <- length(beta)

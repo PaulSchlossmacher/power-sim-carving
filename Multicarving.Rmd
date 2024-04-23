@@ -348,6 +348,14 @@ for some epsilon following the standard normal distribution. Unfortunately this 
 
 ** Include screening in the Power simulations?
 
+## Filip & Paul Tuesday, April 23rd:
+
+* Worked on simulations, where we only use $\hat\beta^{Split}$ or $\hat\beta^{POSI}$ to see how their performances compare to the full $\hat \beta^{Carve}_{Drysdale}$. Got an error for $\hat\beta^{POSI}$, which we'll have to look into again, but we can see the results of the simulation for $\hat\beta^{Split}$ below. 
+
+* Managed to implement a framework for running the simulations in parallel. Chose to do the parallelization already on the level of nsim instead of fraq, since we suspect that this is more efficient. While we can not directly compare our results with the results of our sequential computations, we see that the results seem very reasonable and that the factor by which we're quicker is pretty much exactly the same number as the number of cores used.
+
+* We also tried to get access to the computing resources of the DMath server. However after entering, we weren't sure, what to put in as "hostname or command" and did not want to do anything by which we could disturb current computations.
+
 ## Summary of our results for meeting with Christoph:
 
 By exchanging $y=X\beta_0+\sigma^2\epsilon$ for $y=X\beta_0+\sigma\epsilon$ in the simulation setup we finally managed to get uniformly distributed p-values, which can be observed below.
@@ -362,23 +370,41 @@ By observing the plots under screening and non-screening as below we can also se
 knitr::include_graphics("plots/ecdf_plots_screen_and_noscreen.png")
 ```
 
-Now that the distribution of the p-values seemed to be correct, we took another look at the power and Type-I-Error simulations:
+Now that the distribution of the p-values seemed to be correct, we took another look at the power and Type-I-Error simulations: For $s=5$ we have the results right below:
 
 \begin{figure}[htbp]
 \centering
 \subfloat[one plot]{
-  \includegraphics[width=0.49\linewidth]{plots/ecdf_plots_screen_and_noscreen.png}
+  \includegraphics[width=0.49\linewidth]{plots/PowerPlot_nsim200_5active_sigma2_5frac_with_splitting.png}
 }
 \subfloat[the other one]{
-  \includegraphics[width=0.49\linewidth]{plots/ecdf_plots_screen_and_noscreen.png}
+  \includegraphics[width=0.49\linewidth]{plots/TypeIPlot_nsim200_5active_sigma2_5frac_with_splitting.png}
 }
-\caption{Distribution of p-values for $n=100, p=200, fraq=0.7, s=5, \sigma=1.9$}
-\label{fig:subfigures}
+\caption{Distribution of p-values for $n=100, p=200, s=5, \sigma=2, n_{sim}=200$}
+\label{fig:subfigures_s=5}
+\end{figure}
+
+For $s=15$ the results were even more extreme:
+
+\begin{figure}[htbp]
+\centering
+\subfloat[one plot]{
+  \includegraphics[width=0.49\linewidth]{plots/PowerPlot_nsim200_15active_sigma1_5frac_with_splitting.png}
+}
+\subfloat[the other one]{
+  \includegraphics[width=0.49\linewidth]{plots/TypeIPlot_nsim200_15active_sigma1_5frac_with_splitting.png}
+}
+\caption{Distribution of p-values for $n=100, p=200, s=15, \sigma=1, n_{sim}=200$}
+\label{fig:subfigures_s=15}
 \end{figure}
 
 
 ## Questions
 * We don't set FWER = True in carve.lasso but perform a Bonferroni correction directly in the simulation. What happens exactly if FWER = True is passed as an argument to carve.lasso? Because it first lowers the sig.level by the model.size and then uses this sig.level to determine if the chain for sampling from constraints will be longer. So what is this about?
+
+* For our parallelization file: Is the handling of the seeds correct? We still have a counter, but at the same time we use EculierRNG etc. as well.
+
+* DMath Server - What to put in for "hostname or command"?
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

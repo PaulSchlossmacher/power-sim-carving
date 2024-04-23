@@ -71,6 +71,7 @@ for (j in 1:dim(x)[2]){
   }
 }
 
+
 #Initialization of metrics we want to keep track of
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
@@ -109,8 +110,19 @@ for (fraq_ind in 1:f){
       y <- y.true + sqrt(sigma_squ) * rnorm(n)
       #Normalize y:
       y<-(y-mean(y))
-      split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-      beta_tmp <- split.select.list$beta
+      
+      screening <- FALSE
+      
+      #If screening is not fulfilled, we will repeat the selection
+      while (!screening){
+        split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+        beta_tmp <- split.select.list$beta
+        
+        chosen.index <- which(beta_tmp != 0)
+        screening<-all(sel.index %in% chosen.index)
+      }
+      
+      
       if(sum(beta_tmp!=0)==0){
         #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
         empty_model <- TRUE
@@ -131,7 +143,7 @@ for (fraq_ind in 1:f){
       #print("calculating Drysdales p-values")
       carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
-    
+      
       #print("calculating Christophs p-values")
       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
@@ -159,7 +171,7 @@ for (fraq_ind in 1:f){
     H0F_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==1)
     H0T_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==0)
     H0F_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==1)
-
+    
     #Collecting terms
     test_res_D<-test_res_D + c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
     test_res_C<- test_res_C + c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
@@ -217,46 +229,46 @@ for (fraq_ind in 1:f){
   drysdale.fails[fraq_ind] <- counter - nsim
 }
 
-#save.image(file='myEnvironment_nsim200_6fraqs.RData')
+#save.image(file='myEnvironment_nsim200_6fraqs_screening.RData')
 #load('myEnvironment.RData')
 
 
 
 # --------------- Create plots --------------
 
-data_Power <- data.frame(
+data_Power_screening <- data.frame(
   Fraq=fraq.vec,
   "Avg Power Christoph" = full_power_avg_C,
   "Avg Power Drysdale" = full_power_avg_D
 )
 
-data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+data_Power_long_screening <- tidyr::gather(data_Power_screening, "Type", "Value", -Fraq)
 
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+PowerPlot<-ggplot(data_Power_long_screening, aes(x = Fraq, y = Value, color = Type)) +
   geom_line() +
-  labs(title = "Average Power - with Bonferroni correction",
+  labs(title = "Average Power - with Bonferroni correction & Screening",
        x = "Fraq", y = "Value") +
   theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
   scale_color_discrete(labels=c('Christoph', 'Drysdale'))
 
-ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
+# ggsave("PowerPlot.png_screening", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
-data_TypeI <- data.frame(
+data_TypeI_screening <- data.frame(
   Fraq=fraq.vec,
   "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
   "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
 )
 
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+data_TypeI_long_screening <- tidyr::gather(data_TypeI_screening, "Type", "Value", -Fraq)
 
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
+TypeIPlot<-ggplot(data_TypeI_long_screening, aes(x = Fraq, y = Value, color = Type)) +
   geom_line() +
-  labs(title = "Average Type I Error Rate - with Bonferroni correction",
+  labs(title = "Average Type I Error Rate - with Bonferroni correction & Screening",
        x = "Fraq", y = "Value") +
   theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
   scale_color_discrete(labels=c('Christoph', 'Drysdale'))
 
-ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
+#ggsave("TypeIPlot_screening.png", plot = TypeIPlot, width = 8, height = 6,
+#       units = "in", dpi = 300, bg = "#F0F0F0")

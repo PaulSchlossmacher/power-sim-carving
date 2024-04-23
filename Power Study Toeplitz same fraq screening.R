@@ -46,8 +46,8 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-fraq.vec <- c(0.5, 0.6, 0.7)
-fraq.vec.Drysdale <- fraq.vec
+#fraq.vec <- c(0.7)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -58,8 +58,9 @@ sparsity <- 5
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
+SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 3
+nsim <- 200
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
@@ -69,6 +70,7 @@ for (j in 1:dim(x)[2]){
     x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
   }
 }
+
 
 #Initialization of metrics we want to keep track of
 f <- length(fraq.vec)
@@ -99,6 +101,9 @@ for (fraq_ind in 1:f){
     empty_model <- FALSE
     select.again.counter = 0
     while(select.again){
+      if (select.again.counter > 200){
+        stop("Tried to many selection events and not one of them was conformable for beta_Drysdale")
+      }
       select.again <- FALSE
       set.seed(counter)
       counter <- counter + 1
@@ -106,10 +111,18 @@ for (fraq_ind in 1:f){
       #Normalize y:
       y<-(y-mean(y))
       
-      # First we calculate the p-values with Christoph's method:
+      screening <- FALSE
       
-      split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-      beta_tmp <- split.select.list$beta
+      #If screening is not fulfilled, we will repeat the selection
+      while (!screening){
+        split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+        beta_tmp <- split.select.list$beta
+        
+        chosen.index <- which(beta_tmp != 0)
+        screening<-all(sel.index %in% chosen.index)
+      }
+      
+      
       if(sum(beta_tmp!=0)==0){
         #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
         empty_model <- TRUE
@@ -119,34 +132,16 @@ for (fraq_ind in 1:f){
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
-      
-      
-      split.select.list_D=split.select.list
-      beta_tmp_D<-split.select.list_D$beta
-      lambda_D <- split.select.list_D$lambda
-      split_D <- split.select.list_D$split
-      
-      New_fraq<-FALSE
       if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
-        New_fraq<-TRUE
+        select.again <- TRUE
+        select.again.counter <- select.again.counter + 1
+        print("Need to split again because we selected more variables than beta_D can handle")
       }
-      while(New_fraq==TRUE){
-        #Try new split with less observations for screening:
-        fraq.vec.Drysdale[fraq_ind]<-fraq.vec.Drysdale[fraq_ind]-0.025
-        
-        split.select.list_D <- split.select(x,y,fraction = fraq.vec.Drysdale[fraq_ind])
-        beta_tmp_D <- split.select.list$beta
-        lambda_D <- split.select.list$lambda
-        split_D <- split.select.list$split
-        
-        #Check again whether beta^D can now be computed:
-        if(sum(beta_tmp!=0)<=min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
-          New_fraq<-FALSE
-        }
-      }
-      
+    }
+    
+    if(!empty_model){
       #print("calculating Drysdales p-values")
-      carve_D <-carve.linear(x,y,split = split_D, beta = beta_tmp_D, lambda = lambda_D, sigma=sigma_squ)
+      carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
       
       #print("calculating Christophs p-values")
@@ -163,9 +158,7 @@ for (fraq_ind in 1:f){
       model.size <- length(chosen)
       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
-      
     }
-    
     
     #false positives, true positives, true negatives, false negatives for Drysdales p-values
     H0T_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==0)
@@ -236,45 +229,46 @@ for (fraq_ind in 1:f){
   drysdale.fails[fraq_ind] <- counter - nsim
 }
 
-#save.image(file='myEnvironment_nsim200_6fraqs_diff_fraqs.RData')
+#save.image(file='myEnvironment_nsim200_6fraqs_screening.RData')
 #load('myEnvironment.RData')
 
 
 
 # --------------- Create plots --------------
 
-data_Power <- data.frame(
+data_Power_screening <- data.frame(
   Fraq=fraq.vec,
   "Avg Power Christoph" = full_power_avg_C,
   "Avg Power Drysdale" = full_power_avg_D
 )
 
-data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+data_Power_long_screening <- tidyr::gather(data_Power_screening, "Type", "Value", -Fraq)
 
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+PowerPlot<-ggplot(data_Power_long_screening, aes(x = Fraq, y = Value, color = Type)) +
   geom_line() +
-  labs(title = "Average Power",
+  labs(title = "Average Power - with Bonferroni correction & Screening",
        x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(labels=c('Christoph', 'Drysdale'))
 
-# ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+# ggsave("PowerPlot.png_screening", plot = PowerPlot, width = 8, height = 6,
 #        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
-data_TypeI <- data.frame(
+data_TypeI_screening <- data.frame(
   Fraq=fraq.vec,
   "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
   "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
 )
 
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+data_TypeI_long_screening <- tidyr::gather(data_TypeI_screening, "Type", "Value", -Fraq)
 
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
+TypeIPlot<-ggplot(data_TypeI_long_screening, aes(x = Fraq, y = Value, color = Type)) +
   geom_line() +
-  labs(title = "Average Type I Error Rate",
+  labs(title = "Average Type I Error Rate - with Bonferroni correction & Screening",
        x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_color_discrete(labels=c('Christoph', 'Drysdale'))
 
-# ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
-#        units = "in", dpi = 300, bg = "#F0F0F0")
-
+#ggsave("TypeIPlot_screening.png", plot = TypeIPlot, width = 8, height = 6,
+#       units = "in", dpi = 300, bg = "#F0F0F0")

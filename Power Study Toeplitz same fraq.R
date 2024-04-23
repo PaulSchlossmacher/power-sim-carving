@@ -51,7 +51,8 @@ fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
-sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 sparsity <- 5
@@ -59,7 +60,7 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma_squ <- 1 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
+sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
 nsim <- 200
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
@@ -116,7 +117,7 @@ for (fraq_ind in 1:f){
         empty_model <- TRUE
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
-        print("0 variables where chosen by the lasso, repeating selection")
+        print("0 variables where chosen by the lasso, but thats not a problem.t")
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
@@ -217,7 +218,7 @@ for (fraq_ind in 1:f){
   drysdale.fails[fraq_ind] <- counter - nsim
 }
 
-#save.image(file='myEnvironment_nsim200_6fraqs.RData')
+#save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
 #load('myEnvironment.RData')
 
 

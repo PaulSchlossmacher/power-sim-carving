@@ -1,3 +1,4 @@
+
 #Trying to create a more extreme Toeplitz example with less noise to 
 #encourage Lasso to use more variables:
 # Clear all variables
@@ -259,3 +260,4 @@ TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
 
 ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
+

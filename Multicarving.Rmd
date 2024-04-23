@@ -179,15 +179,15 @@ During the simulation it happened sometimes that the model selection did select 
 * If we are going to ask Christoph for some help, we need a bit clearer code. I added some function parameter documentation in SNTN_CDF and carve_linear and removed some unnecessary function inputs, like args.model.selector, which were not used by now
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, which was used to compare with carve.lasso from Christoph. Both plots use sample size 1000", out.width = "450px"}
-knitr::include_graphics("plots/QQ_plots_carve_linear_version1(N=1000).png")
+knitr::include_graphics("plots/wrong plots/QQ_plots_carve_linear_version1(N=1000).png")
 ```
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed with our initial version of carve.linear, where only the variance of the truncated normal distribution has a changed paramater from $\\tau_M = \\sigma^2$ to the scaled eta-var from Drysdale's Code. Both plots use sample size 1000", out.width = "450px"}
-knitr::include_graphics("plots/QQ_plots_carve_linear_with_eta_var(N=1000).png")
+knitr::include_graphics("plots/wrong plots/QQ_plots_carve_linear_with_eta_var(N=1000).png")
 ```
 
 ```{r, echo=FALSE,fig.cap="QQ-plots performed on p-values from carve.linear which did not normalize in the computation of the truncation limits. Both plots use sample size 1000", out.width = "450px"}
-knitr::include_graphics("plots/QQ_plots_without_normalization.png")
+knitr::include_graphics("plots/wrong plots/QQ_plots_without_normalization.png")
 ```
 
 ```{r, echo=FALSE,fig.cap="Histogram of p-values under screening obtained from carve.linear without normalization of truncation limits.", out.width = "450px"}
@@ -240,7 +240,7 @@ We also noticed that the maximum (or minimum for $V^{+}(z)$) was typically being
 However even though we now have reasonable values for the truncation limits, our plots of p-values of the selected but non-truly-active coefficients under the Null hypothesis still do not display a uniform distribution.
 
 ```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup.", out.width = "450px"}
-knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals.png")
+knitr::include_graphics("plots/wrong plots/histogram_and_cdf_of_screened_pvals.png")
 ```
 
 ## Meeting Christoph, 18th April
@@ -266,7 +266,7 @@ We discussed how to use the browser() command for debugging. It breaks the code 
 * The distribution of p-values of truly inactive coefficients given screening is still not a perfectly uniform distribution, but we are getting very close, see figure 6.
 
 ```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup.", out.width = "450px"}
-knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=10000).png")
+knitr::include_graphics("plots/wrong plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=10000).png")
 ```
 
 * Update, evening: We now also ran the same code as above for changed parameters in the toeplitz example. Namely:
@@ -282,7 +282,7 @@ knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constra
 * Unfortunately this yielded about as bad a result as far as the distribution is concerned as we had before. A positive note is that it seems like the conditioning events still held, i.e. we did not get a warning that $Ay>b$.
 
 ```{r, echo=FALSE,fig.cap="Histogram and empirical cdf of p-values under screening obtained from carve.linear without normalization of truncation limits and fixed vlo/vup under new parameters.", out.width = "450px"}
-knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
+knitr::include_graphics("plots/wrong plots/histogram_and_cdf_of_screened_pvals_valid_constraints(N=3000)_changed_parameters.png")
 ```
 
 ## Email Christoph, April 19th
@@ -307,11 +307,11 @@ I then went on to pursue the same goal by just running a similar Toeplitz simula
 I still have to think again about which coefficients we should actually observe here, but I got these two plots that are bimodal around 0 and 1:
 
 ```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of $\\beta^{Split}$ for s=1143", out.width = "450px"}
-knitr::include_graphics("plots/Empirical PDF beta_split whole, s=1143.png")
+knitr::include_graphics("plots/wrong plots/Empirical PDF beta_split whole, s=1143.png")
 ```
 
 ```{r, echo=FALSE,fig.cap="Empirical pdf of coefficients of $\\beta^{Split}$ for s=1143", out.width = "450px"}
-knitr::include_graphics("plots/Empirical PDF beta_posi whole, s=1143.png")
+knitr::include_graphics("plots/wrong plots/Empirical PDF beta_posi whole, s=1143.png")
 ```
 
 
@@ -346,6 +346,16 @@ for some epsilon following the standard normal distribution. Unfortunately this 
 
 ** Include screening in the Power simulations?
 
+## Summary of our results for meeting with Christoph:
+
+By exchanging $y=X\beta_0+\sigma^2\epsilon$ for $y=X\beta_0+\sigma\epsilon$ in the simulation setup we finally managed to get uniformly distributed p-values, which can be observed in \@ref(fig:Histo_pvals)
+
+```{r Histo_pvals, echo=FALSE,fig.cap="Empirical pdf of coefficients of $\\beta^{Split}$ for s=1143", out.width = "450px"}
+knitr::include_graphics("plots/histogram_and_cdf_of_screened_pvals_N=3000.jpeg")
+```
+
+
+Now that the distribution of the p-values seemed to be correct.
 
 ## Questions
 * We don't set FWER = True in carve.lasso but perform a Bonferroni correction directly in the simulation. What happens exactly if FWER = True is passed as an argument to carve.lasso? Because it first lowers the sig.level by the model.size and then uses this sig.level to determine if the chain for sampling from constraints will be longer. So what is this about?

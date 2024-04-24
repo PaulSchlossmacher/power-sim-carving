@@ -48,8 +48,8 @@ n <- 100
 p <- 200
 rho <- 0.6
 fraq.vec <- c(0.5,0.6,0.7)
+#fraq.vec <- c(0.5)
 #fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
-#fraq.vec <- c(0.5,0.55,0.6)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -63,7 +63,8 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 100
+nsim <- 50
+sig.level <- 0.05
 
 total.time <- 0
 start.time <- Sys.time()
@@ -87,6 +88,28 @@ progress <- function(n, tag) {
   }
 }
 
+conf_matrix <- function(p.vals, sig.level = 0.05, beta){
+  #Calculate false positives, true positives, true negatives, false negatives
+  H0T_Rej<-sum(p.vals<=sig.level & beta==0)
+  H0F_Rej<-sum(p.vals<=sig.level & beta==1)
+  H0T_N_Rej<-sum(p.vals>sig.level & beta==0)
+  H0F_N_Rej<-sum(p.vals>sig.level & beta==1)
+  return (c(H0T_Rej, H0F_Rej, H0T_N_Rej, H0F_N_Rej))
+}
+
+plot_conf_matrix <- function(test_res_avg, name, nsim){
+  #Create average confusion matrices obtained from one fraction and output to console
+  testing_table <- matrix(
+    test_res_avg,
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+  )
+  cat("The average confusion matrix of", name ,"p-values over ", nsim, "calculations is: \n")
+  print(testing_table)
+}
+
+
 #Initialization of metrics we want to keep track of
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
@@ -95,6 +118,8 @@ full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
+full_FWER_D <- rep(0,f)
+full_FWER_C <- rep(0,f)
 #Should count fails of drysdales estimator for a given fraction over nsim rounds
 drysdale.fails <- rep(0,f)
 RNGkind("L'Ecuyer-CMRG")
@@ -105,15 +130,14 @@ seed.n <- 0
 for(fraq_ind in  1:f){
   seed.n <- seed.n + 1
   set.seed(seed.vec[seed.n])
-  counter <- 0
-  
+
   opts <- list(progress = progress)
   cl<-makeSOCKcluster(12) 
   rseed <- seed.vec[seed.n]
   clusterSetRNGStream(cl, iseed = rseed) #make things reproducible
   registerDoSNOW(cl)
-  
   tic()
+  #start parallel computation
   results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
                      .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
                                   "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
@@ -133,8 +157,6 @@ for(fraq_ind in  1:f){
         stop("Tried to many selection events and not one of them was conformable for beta_Drysdale")
       }
       select.again <- FALSE
-      set.seed(counter)
-      counter <- counter + 1
       y <- y.true + sqrt(sigma_squ) * rnorm(n)
       #Normalize y:
       y<-(y-mean(y))
@@ -157,11 +179,10 @@ for(fraq_ind in  1:f){
     }
     
     if(!empty_model){
-      #print("calculating Drysdales p-values")
+      #Compute pure p-values from Drysdale's and Christoph's approach
       carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
       
-      #print("calculating Christophs p-values")
       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
       p_vals_C_nofwer<-carve_C$pv
@@ -171,79 +192,52 @@ for(fraq_ind in  1:f){
       chosen <- which(abs(beta_tmp)>0)
       p_vals_comp_C[chosen] <- p_vals_C_nofwer
       
-      #Add FWER control
+      #Add FWER control with Bonferroni correction
       model.size <- length(chosen)
       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
     }
     
-    #false positives, true positives, true negatives, false negatives for Drysdales p-values
-    H0T_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==0)
-    H0F_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==1)
-    H0T_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==0)
-    H0F_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==1)
-    
-    #false positives, true positives, true negatives, false negatives for Christoph's p-values
-    H0T_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==0)
-    H0F_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==1)
-    H0T_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==0)
-    H0F_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==1)
-    
-    #Collecting terms
-    test_res_D<-c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
-    test_res_C<- c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
-    #calculating power and type1 error for 1 round in simulation
-    powers_D <- H0F_Rej_D/(length(sel.index))
-    powers_C <- H0F_Rej_C/(length(sel.index))
-    type1_error_D <- H0T_Rej_D/(p-length(sel.index))
-    type1_error_C <- H0T_Rej_C/(p-length(sel.index))
-    
-    
-    list(test_res_D = test_res_D,
-         test_res_C = test_res_C,
-         powers_D = powers_D,
-         powers_C = powers_C,
-         type1_error_D = type1_error_D,
-         type1_error_C = type1_error_C)
+    list(p_vals_D_fwer = p_vals_D_fwer, 
+         p_vals_C_fwer = p_vals_C_fwer)
     
   }
   toc()
   stopCluster(cl)
+  #Fetch p-values obtained from parallel computation
   results <- as.data.frame(results)
-  test_res_D_avg <- colMeans(do.call(rbind, results$test_res_D))
-  test_res_C_avg <- colMeans(do.call(rbind, results$test_res_C))
-  power_avg_D <- mean(do.call(rbind, results$powers_D))
-  power_avg_C <- mean(do.call(rbind, results$powers_C))
-  type1_error_avg_D <- mean(do.call(rbind, results$type1_error_D))
-  type1_error_avg_C <- mean(do.call(rbind, results$type1_error_C))
+  p_vals_D_fwer <- results$p_vals_D_fwer
+  p_vals_C_fwer <- results$p_vals_C_fwer
+  #Compute confusion matrices, power and type1 error from parallel computation and average over all of them
+  conf_matrices_D <- lapply(p_vals_D_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrices_C <- lapply(p_vals_C_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrix_all_D <- do.call(rbind, conf_matrices_D)
+  conf_matrix_all_C <- do.call(rbind, conf_matrices_C)
+  #Averaging over metrics
+  test_res_D_avg <- colMeans(conf_matrix_all_D)
+  test_res_C_avg <- colMeans(conf_matrix_all_C)
+  power_avg_D <- test_res_D_avg[2]/(length(sel.index))
+  power_avg_C <- test_res_C_avg[2]/(length(sel.index))
+  type1_error_avg_D <- test_res_D_avg[1]/(p-length(sel.index))
+  type1_error_avg_C <- test_res_C_avg[1]/(p-length(sel.index))
+  #Calculate FWER
+  H0T_Rej_any_D <- lapply(p_vals_D_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  H0T_Rej_any_C <- lapply(p_vals_C_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  FWER_D <- sum(do.call(rbind,H0T_Rej_any_D))/nsim
+  FWER_C <- sum(do.call(rbind,H0T_Rej_any_C))/nsim
   
-  #Creating average confusion matrices obtained from one fraction
-  Testing_table_D_avg <- matrix(
-    test_res_D_avg,
-    nrow = 2,
-    byrow = TRUE,
-    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
-  )
-  
-  Testing_table_C_avg <- matrix(
-    test_res_C_avg,
-    nrow = 2,
-    byrow = TRUE,
-    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
-  )
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
-  cat("The average confusion matrix of Drydales p-values over ", nsim, "calculations is: \n")
-  print(Testing_table_D_avg)
-  cat("The average confusion matrix of Christoph's p-values over ", nsim, "calculations is: \n")
-  print(Testing_table_C_avg)
-  
+  plot_conf_matrix(test_res_D_avg,"Drysdale's", nsim)
+  plot_conf_matrix(test_res_C_avg,"Christoph's", nsim)
   cat("The average power of Drysdales p-values:", power_avg_D, "\n")
   cat("The average power of Christophs p-values:", power_avg_C,"\n")
-  cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
-  cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
+  #cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
+  #cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
+  cat("The FWER of Drysdales p-values:", FWER_D,"\n")
+  cat("The FWER of Christophs p-values:", FWER_C,"\n")
   
-  
+
   #Store everything to create plots later
   full_test_res_D[fraq_ind, ] <- test_res_D_avg
   full_test_res_C[fraq_ind, ] <- test_res_C_avg
@@ -251,14 +245,15 @@ for(fraq_ind in  1:f){
   full_power_avg_C[fraq_ind] <- power_avg_C
   full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
-  #collecting fails of drysdales estimator of one fraction 
-  drysdale.fails[fraq_ind] <- counter - nsim
+  full_FWER_D[fraq_ind] <- FWER_D
+  full_FWER_C[fraq_ind] <- FWER_C
   
 }
 
 end.time <- Sys.time()
 total.time <- end.time - start.time
-cat("Total time needed for simulation:", total.time)
+cat("Total time needed for simulation:")
+print(total.time)
 
 #save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
 #load('myEnvironment.RData')

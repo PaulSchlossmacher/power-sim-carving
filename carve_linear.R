@@ -161,7 +161,6 @@ carve.linear <- function(x, y, split, beta, lambda,
   #Give warning if A_1%*%y_A>b_1:
   if (any(A%*%y.a>b)) {
     warning("A.1%*%y.a>b.1, conditioning is not fulfilled")
-    browser()
   }
   
   #Inserted this to check for direction of pvals, if the sign of beta_select is negative, we take cdf
@@ -195,8 +194,6 @@ beta.split <- function(x, y, split, beta, sigma){
   p <- length(beta)
   n.a <- length(split)
   n.b <- n-n.a
-  #x.a <- x[split, ]
-  #y.a <- y[split, ]
   x.b <- x[-split, ]
   y.b <- y[-split, ]
   sigma_squ <- sigma
@@ -216,7 +213,6 @@ beta.split <- function(x, y, split, beta, sigma){
   
   #compute the beta_split
   beta_split<-x.Mb.i %*% y.b
-  #beta_split/
   
   var_vector <- sigma_squ*diag(solve(t(x.Mb)%*%x.Mb))
   pvals <- rep(1,p)
@@ -350,12 +346,12 @@ beta.posi <- function(x, y, split, beta, lambda,
   #Give warning if A_1%*%y_A>b_1:
   if (any(A%*%y.a>b)) {
     warning("A.1%*%y.a>b.1, conditioning is not fulfilled")
-    browser()
   }
   
   pvals <- rep(1,p)
   for (i in 1:s){
-    cdf<-pnormTrunc(q=beta_posi[i], mean=theta.2[i], sd=sqrt(tau.2[i]), min=vlo[i], max=vup[i])
+    #cdf<-pnormTrunc(q=beta_posi[i], mean=theta.2[i], sd=sqrt(tau.2[i]), min=vlo[i], max=vup[i])
+    cdf<-ptruncnorm(q=beta_posi[i], a=vlo[i], b=vup[i], mean=theta.2[i], sd=sqrt(tau.2[i]))
     pv <- 2*min(cdf, 1-cdf)
     pvals[chosen[i]] <- pv
   }

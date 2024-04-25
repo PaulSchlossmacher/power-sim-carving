@@ -115,15 +115,19 @@ f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
 full_test_res_split <- matrix(rep(0,4*f), nrow = f)
+full_test_res_posi <- matrix(rep(0,4*f), nrow = f)
 full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_power_avg_split <- rep(0,f)
+full_power_avg_posi <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
 full_type1_error_avg_split <- rep(0,f)
+full_type1_error_avg_posi <- rep(0,f)
 full_FWER_D <- rep(0,f)
 full_FWER_C <- rep(0,f)
 full_FWER_split <- rep(0,f)
+full_FWER_posi <- rep(0,f)
 #Should count fails of drysdales estimator for a given fraction over nsim rounds
 drysdale.fails <- rep(0,f)
 RNGkind("L'Ecuyer-CMRG")
@@ -145,16 +149,6 @@ for(fraq_ind in  1:f){
   results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
                      .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
                                   "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
-    # test_res_D <- numeric(4)
-    # test_res_C <- numeric(4)
-    # test_res_split <- numeric(4)
-    # powers_D <- numeric(1)
-    # powers_C <- numeric(1)
-    # powers_split <- numeric(1)
-    # type1_error_D <- numeric(1)
-    # type1_error_C <- numeric(1)
-    # type1_error_split <- numeric(1)
-    print(i)
     #get different selection events
     select.again <- TRUE
     empty_model <- FALSE
@@ -175,6 +169,7 @@ for(fraq_ind in  1:f){
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
+        p_vals_posi_fwer <- rep(1,p)
         print("0 variables where chosen by the lasso, but thats not a problem.t")
       }
       lambda <- split.select.list$lambda
@@ -196,6 +191,7 @@ for(fraq_ind in  1:f){
       p_vals_C_nofwer<-carve_C$pv
       
       p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
+      p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
       
       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
       p_vals_comp_C<-rep(1,p)
@@ -207,11 +203,14 @@ for(fraq_ind in  1:f){
       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
+      p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size,1)
+      
     }
     
     list(p_vals_D_fwer = p_vals_D_fwer, 
          p_vals_C_fwer = p_vals_C_fwer,
-         p_vals_split_fwer = p_vals_split_fwer)
+         p_vals_split_fwer = p_vals_split_fwer,
+         p_vals_posi_fwer = p_vals_posi_fwer)
     
   }
   toc()
@@ -221,32 +220,38 @@ for(fraq_ind in  1:f){
   p_vals_D_fwer <- results$p_vals_D_fwer
   p_vals_C_fwer <- results$p_vals_C_fwer
   p_vals_split_fwer <- results$p_vals_split_fwer
+  p_vals_posi_fwer <- results$p_vals_posi_fwer
   #Compute confusion matrices, power and type1 error from parallel computation and average over all of them
   conf_matrices_D <- lapply(p_vals_D_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_C <- lapply(p_vals_C_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_split <-lapply(p_vals_split_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrices_posi <-lapply(p_vals_posi_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrix_all_D <- do.call(rbind, conf_matrices_D)
   conf_matrix_all_C <- do.call(rbind, conf_matrices_C)
   conf_matrix_all_split <- do.call(rbind, conf_matrices_split)
+  conf_matrix_all_posi <- do.call(rbind, conf_matrices_posi)
   #Averaging over metrics
   test_res_D_avg <- colMeans(conf_matrix_all_D)
   test_res_C_avg <- colMeans(conf_matrix_all_C)
   test_res_split_avg <- colMeans(conf_matrix_all_split)
+  test_res_posi_avg <- colMeans(conf_matrix_all_posi)
   power_avg_D <- test_res_D_avg[2]/(length(sel.index))
   power_avg_C <- test_res_C_avg[2]/(length(sel.index))
   power_avg_split <- test_res_split_avg[2]/(length(sel.index))
+  power_avg_posi <- test_res_posi_avg[2]/(length(sel.index))
   type1_error_avg_D <- test_res_D_avg[1]/(p-length(sel.index))
   type1_error_avg_C <- test_res_C_avg[1]/(p-length(sel.index))
   type1_error_avg_split <- test_res_split_avg[1]/(p-length(sel.index))
-  
+  type1_error_avg_posi <- test_res_posi_avg[1]/(p-length(sel.index))
   #Calculate FWER
   H0T_Rej_any_D <- lapply(p_vals_D_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_C <- lapply(p_vals_C_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_split <- lapply(p_vals_split_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  H0T_Rej_any_posi <- lapply(p_vals_posi_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   FWER_D <- sum(do.call(rbind,H0T_Rej_any_D))/nsim
   FWER_C <- sum(do.call(rbind,H0T_Rej_any_C))/nsim
   FWER_split <- sum(do.call(rbind,H0T_Rej_any_split))/nsim
-  
+  FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
   plot_conf_matrix(test_res_D_avg,"Drysdale's", nsim)
@@ -254,26 +259,30 @@ for(fraq_ind in  1:f){
   cat("The average power of Drysdales p-values:", power_avg_D, "\n")
   cat("The average power of Christophs p-values:", power_avg_C,"\n")
   cat("The average power of splitting p-values:", power_avg_split,"\n")
-  
+  cat("The average power of posi p-values:", power_avg_posi,"\n")
   #cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
   #cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
   cat("The FWER of Drysdales p-values:", FWER_D,"\n")
   cat("The FWER of Christophs p-values:", FWER_C,"\n")
   cat("The FWER of splitting p-values:", FWER_split,"\n")
-
+  cat("The FWER of posi p-values:", FWER_posi,"\n")
   #Store everything to create plots later
   full_test_res_D[fraq_ind, ] <- test_res_D_avg
   full_test_res_C[fraq_ind, ] <- test_res_C_avg
   full_test_res_split[fraq_ind, ] <- test_res_split_avg
+  full_test_res_posi[fraq_ind, ] <- test_res_posi_avg
   full_power_avg_D[fraq_ind] <- power_avg_D
   full_power_avg_C[fraq_ind] <- power_avg_C
   full_power_avg_split[fraq_ind] <- power_avg_split
+  full_power_avg_posi[fraq_ind] <- power_avg_posi
   full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
   full_type1_error_avg_split[fraq_ind] <- type1_error_avg_split
+  full_type1_error_avg_posi[fraq_ind] <- type1_error_avg_posi
   full_FWER_D[fraq_ind] <- FWER_D
   full_FWER_C[fraq_ind] <- FWER_C
   full_FWER_split[fraq_ind] <- FWER_split
+  full_FWER_posi[fraq_ind] <- FWER_posi
 }
 
 end.time <- Sys.time()
@@ -289,7 +298,8 @@ data_Power <- data.frame(
   Fraq=fraq.vec,
   "Avg Power Christoph" = full_power_avg_C,
   "Avg Power Drysdale" = full_power_avg_D,
-  "Avg Power Splitting" = full_power_avg_split
+  "Avg Power Splitting" = full_power_avg_split,
+  "Avg Power Posi" = full_power_avg_posi
 )
 
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
@@ -308,7 +318,9 @@ data_TypeI <- data.frame(
   Fraq=fraq.vec,
   "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
   "Avg Type I Error rate Drysdale" = full_type1_error_avg_D,
-  "Avg Type I Error rate Splitting" = full_type1_error_avg_split
+  "Avg Type I Error rate Splitting" = full_type1_error_avg_split,
+  "Avg Type I Error rate Posi" = full_type1_error_avg_posi
+  
 )
 
 data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
@@ -322,3 +334,4 @@ TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
 ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
+#p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals_split

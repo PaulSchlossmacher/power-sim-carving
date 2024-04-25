@@ -145,16 +145,6 @@ for(fraq_ind in  1:f){
   results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
                      .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
                                   "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
-    # test_res_D <- numeric(4)
-    # test_res_C <- numeric(4)
-    # test_res_split <- numeric(4)
-    # powers_D <- numeric(1)
-    # powers_C <- numeric(1)
-    # powers_split <- numeric(1)
-    # type1_error_D <- numeric(1)
-    # type1_error_C <- numeric(1)
-    # type1_error_split <- numeric(1)
-    print(i)
     #get different selection events
     select.again <- TRUE
     empty_model <- FALSE

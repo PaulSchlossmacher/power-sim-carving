@@ -406,6 +406,24 @@ For $s=15$ the results were even more extreme:
 
 * DMath Server - What to put in for "hostname or command"?
 
+## Filip, since last meeting
+The following adjustments were made to the parallelized power study:
+
+* Fixed seed management
+* Made correct FWER computation
+* Added logs of print messages
+* Added compatitibility for our repeated selection counter
+* Added FWER data to power plot and automatic detection of overlapping points, which get separated if necessary for better visualization
+* Implemented functions to avoid too much code repetition
+
+Furthermore I implemented a parallelized power study with posi, which also displays posi power and type1 error for the different fractions. I made this one separately as I think that including all of posi's power values is just useful for interpretation of the resulting power of Drysdale's estimator and does not reflect the true usecase of posi, which would be on all of the data.
+Other than that I found that with 5 active variables we can easily go up to fractions of 0.9
+
+Open questions:
+
+* How can Christoph display the splitting estimators power up to fractions of 0.99 without running into the same problems as we get with Drysdale's estimator?
+
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

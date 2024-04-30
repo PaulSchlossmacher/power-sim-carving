@@ -423,6 +423,15 @@ Open questions:
 
 * How can Christoph display the splitting estimators power up to fractions of 0.99 without running into the same problems as we get with Drysdale's estimator?
 
+## Filip Tuesday, April 30th
+The following work was done on parallelized power study with different fraqs: 
+
+* Found the origin of the strange C++ error concerning glmnet. In case of a reselection for Drysdale's estimator the inner while loop never ended, letting the splitting fraction drop so low that there was zero variance in the predictor variables.
+* For higher fractions I obtained sometimes an error on singular matrices within carve_linear. This happened because we did not reset the fraq.vec.Drysdale entries before every simulation round and hence the checking of well-definedness for beta_split and beta_D was not valid anymore. E.g. for a selection with fraction 0.9 they have been checking the conditions on some fraction below 0.9 that was obtained in a previous simulation round. Hence we sometimes obtained a valid check even tough the estimators beta_D and beta_split were not well-defined.
+
+Further thoughts:
+
+* How should we plot the results in this file? Should we extract maybe the frac.vec.Drysdale values that were used for the selections to be acceptable and draw a point in the power plot on their average. It could be misleading that the lines for Drysdale/split go so far. But on the other hand if we were to make the simulations up to fractions of 0.99 they would probably exhibit some kind of plateau anyways as their used fractions would always be lowered to some working fraction. Nevertheless if we keep the plot this way, we should somehow write what fraction was the highest possible to be really used for the values in the plot.
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

@@ -48,8 +48,8 @@ rho <- 0.6
 #fraq.vec <- c(0.7,0.8,0.9) #to reproduce the error
 #fraq.vec <- c(0.5,0.6,0.7,0.8)
 
-fraq.vec <- c(0.5, 0.95)
-#fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
+#fraq.vec <- c(0.5, 0.95)
+fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
 
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
@@ -64,7 +64,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 10
+nsim <- 200
 sig.level <- 0.05
 new_fraq_threshold<-0
 fraq.vec.Drysdale<-fraq.vec
@@ -339,7 +339,7 @@ total.time <- end.time - start.time
 cat("Total time needed for simulation:")
 print(total.time)
 
-#save.image(file='myEnvironment_nsim200_5active_sigma2_diff_fraqs_failed.RData')
+#save.image(file='myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
 #load('myEnvironment.RData')
 # --------------- Create plots --------------
 
@@ -351,7 +351,7 @@ data_Power <- data.frame(
   "Avg Power Posi" = full_power_avg_posi
 )
 
-labels_fraqs_D<-c(rep("", 2), rep(avg_fraq.vec.Drysdale, 3))
+labels_fraqs_D<-c(rep("",f), rep(round(avg_fraq.vec.Drysdale,3), 3))
 
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 
@@ -388,8 +388,6 @@ TypeIPlot
 
 ggsave("TypeIPlot_diff_fraqs.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
-
-#p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals_split
 
 TypeIPlot
 PowerPlot

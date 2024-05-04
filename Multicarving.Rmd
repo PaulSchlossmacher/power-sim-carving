@@ -444,15 +444,12 @@ Further thoughts:
 
 ## Filip & Paul 29th April - 1st of May:
 
-We implemented a new version of the parallelized power study, which is supposed to test $\hat \beta^{Drysdale}$ and also $\hat \beta^{POSI}$ and $\hat \beta^{Split}$ in a different manner to before. The idea is the following:
 
-* All of $\hat \beta^{Drysdale}, \hat \beta^{Carve}, \hat \beta^{POSI}$ and $\hat \beta^{Split}$ start on the same fraction. Let $s:=\#M_A$ and let $f \in [0,1]$ be the the fraction of the observations that are being used for variable selection. Therefore $\hat \beta^{Drysdale}$ can not be computed due to rank deficiency, if $s>\min\{n*f, n*(1-f)\}$. If that happens in a specific run of the simulation, we set f=f-0.025 and run the Lasso again for variable selection. We repeat this process until $\hat \beta^{Drysdale}$ can be computed.
+* Found the origin of the strange C++ error concerning glmnet. In case of a reselection for Drysdale's estimator the inner while loop never ended, letting the splitting fraction drop so low that there was zero variance in the predictor variables.
+* For higher fractions I obtained sometimes an error on singular matrices within carve_linear. This happened because we did not reset the fraq.vec.Drysdale entries before every simulation round and hence the checking of well-definedness for beta_split and beta_D was not valid anymore. E.g. for a selection with fraction 0.9 they have been checking the conditions on some fraction below 0.9 that was obtained in a previous simulation round. Hence we sometimes obtained a valid check even tough the estimators beta_D and beta_split were not well-defined.
 
-* The idea of this setup is to compare $\hat \beta^{Drysdale}$ to $\hat \beta^{Carve}$ while having both in their respectively optimal environments as far as the selection-inference split is concerned. Since $\hat \beta^{Drysdale}$ can not be computed for splits where $f$ is close to $1$, because to little observations are left to deal with the amount of active variables, we expect to see that as $f$ rises, the $\hat \beta^{Drysdale}$ will have to reduce its fraction more and more and therefore be less likely to fulfill the screening condition. Thus, setting p-values to 1 for some truly active variables, would in theory result in lower power for very high fractions for $\hat \beta^{Drysdale}$ than in the previous simulation.
+Further thoughts:
 
-## Paul 3rd of May 2024
-
-* Corrected the condition under which $\hat \beta^{Drysdale}$ can not be calculated. Due to the Lasso only choosing $s\leq \min\{n_A,p\}$ variables, we only need the condition $s \leq n*(1-f)$ instead of $s \leq \min\{n*f, n*(1-f)\}$, since $s \leq n*(1-f)$ is already guaranteed anyways.
 
 * Implemented the calculation of a vector in parallelized_power_study_diff_fraq.R, that tracks the average fraction, that $\hat \beta^{Drydale}$ uses to reach a setup, where the estimator can be computed. This is also included in the final power and Type-I-error plots.
 
@@ -471,6 +468,9 @@ Tried to find the reason for the p-values of $\hat \beta^{PoSI}$ yielding NaNs. 
 In principle these values don't look particularly strange. However it turns out, that the standard deviation seems to be so small, that the ptruncnorm function struggles to calculate the probability, which should just be very close to 1. Since $\hat \beta^{PoSI}=1.58$, it makes sense for pnormtrunc = $\mathbb{P}(Z\leq 1.56) \approx 1$, since the mean is 0 and the standard deviation is very small.
 It turns out that there is no problem in the opposite case, i.e. for example with ptruncnorm(q=1, a=0, b=25, mean=20, sd=0.000001) we just get probability 0, which makes sense.
 We conclude, that for our purposes it is therefore sufficient to replace NaNs with 1s, whenever they occur.
+
+* How should we plot the results in this file? Should we extract maybe the frac.vec.Drysdale values that were used for the selections to be acceptable and draw a point in the power plot on their average. It could be misleading that the lines for Drysdale/split go so far. But on the other hand if we were to make the simulations up to fractions of 0.99 they would probably exhibit some kind of plateau anyways as their used fractions would always be lowered to some working fraction. Nevertheless if we keep the plot this way, we should somehow write what fraction was the highest possible to be really used for the values in the plot.
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

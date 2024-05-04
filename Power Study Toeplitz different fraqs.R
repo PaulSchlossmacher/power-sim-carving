@@ -96,7 +96,8 @@ for (fraq_ind in 1:f){
     print(i)
     #get different selection events
     select.again <- TRUE
-    empty_model <- FALSE
+    empty_model_C <- FALSE
+    empty_model_D
     select.again.counter = 0
     while(select.again){
       select.again <- FALSE
@@ -107,12 +108,12 @@ for (fraq_ind in 1:f){
       y<-(y-mean(y))
       
       # First we calculate the p-values with Christoph's method:
-      
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
         #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
-        empty_model <- TRUE
+        empty_model_C <- TRUE
+        empty_model_D <- TRUE
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
         print("0 variables where chosen by the lasso, repeating selection")
@@ -126,10 +127,12 @@ for (fraq_ind in 1:f){
       lambda_D <- split.select.list_D$lambda
       split_D <- split.select.list_D$split
       
-      New_fraq<-FALSE
-      if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
-        New_fraq<-TRUE
+      New_fraq<-TRUE
+      
+      if(sum(beta_tmp_D!=0)<=min(n*fraq.vec.Drysdale[fraq_ind], n*(1-fraq.vec.Drysdale[fraq_ind]))){
+        New_fraq<-FALSE
       }
+  
       while(New_fraq==TRUE){
         #Try new split with less observations for screening:
         fraq.vec.Drysdale[fraq_ind]<-fraq.vec.Drysdale[fraq_ind]-0.025
@@ -140,10 +143,20 @@ for (fraq_ind in 1:f){
         split_D <- split.select.list$split
         
         #Check again whether beta^D can now be computed:
-        if(sum(beta_tmp!=0)<=min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
+        if(sum(beta_tmp_D!=0)<=min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
           New_fraq<-FALSE
         }
+        
+      # Check for empty model for potentially new split for Drysdale:
+        
+        if(sum(beta_tmp_D!=0)==0){
+          #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
+          empty_model_D <- TRUE
+          p_vals_D_fwer <- rep(1,p)
+          #print("0 variables where chosen by the lasso, repeating selection")
+        }
       }
+      
       
       #print("calculating Drysdales p-values")
       carve_D <-carve.linear(x,y,split = split_D, beta = beta_tmp_D, lambda = lambda_D, sigma=sigma_squ)
@@ -278,3 +291,9 @@ TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
 # ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
 #        units = "in", dpi = 300, bg = "#F0F0F0")
 
+
+Posi_Error=T
+Split_Error=T
+
+Drysdale_Error=!(!Posi_Error & !Split_Error)
+Drysdale_Error

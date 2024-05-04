@@ -433,6 +433,53 @@ Further thoughts:
 
 * How should we plot the results in this file? Should we extract maybe the frac.vec.Drysdale values that were used for the selections to be acceptable and draw a point in the power plot on their average. It could be misleading that the lines for Drysdale/split go so far. But on the other hand if we were to make the simulations up to fractions of 0.99 they would probably exhibit some kind of plateau anyways as their used fractions would always be lowered to some working fraction. Nevertheless if we keep the plot this way, we should somehow write what fraction was the highest possible to be really used for the values in the plot.
 
+## Filip & Paul 29th April - 1st of May:
+
+
+* Found the origin of the strange C++ error concerning glmnet. In case of a reselection for Drysdale's estimator the inner while loop never ended, letting the splitting fraction drop so low that there was zero variance in the predictor variables.
+* For higher fractions I obtained sometimes an error on singular matrices within carve_linear. This happened because we did not reset the fraq.vec.Drysdale entries before every simulation round and hence the checking of well-definedness for beta_split and beta_D was not valid anymore. E.g. for a selection with fraction 0.9 they have been checking the conditions on some fraction below 0.9 that was obtained in a previous simulation round. Hence we sometimes obtained a valid check even tough the estimators beta_D and beta_split were not well-defined.
+
+Further thoughts:
+
+
+* Implemented the calculation of a vector in parallelized_power_study_diff_fraq.R, that tracks the average fraction, that $\hat \beta^{Drydale}$ uses to reach a setup, where the estimator can be computed. This is also included in the final power and Type-I-error plots.
+
+Tried to find the reason for the p-values of $\hat \beta^{PoSI}$ yielding NaNs. With the help of Filips "reproduce_NaN.R" file, I could track it down to the case of the truly active variable with index Nr. 15. Here we have:
+
+* $\hat \beta^{PoSI}=1.58$
+
+* $V^-=1.424$
+
+* $V^+=6.29$
+
+* $\theta_2=0$
+
+* $\sqrt{\tau_2}=0.17$
+
+In principle these values don't look particularly strange. However it turns out, that the standard deviation seems to be so small, that the ptruncnorm function struggles to calculate the probability, which should just be very close to 1. Since $\hat \beta^{PoSI}=1.58$, it makes sense for pnormtrunc = $\mathbb{P}(Z\leq 1.56) \approx 1$, since the mean is 0 and the standard deviation is very small.
+It turns out that there is no problem in the opposite case, i.e. for example with ptruncnorm(q=1, a=0, b=25, mean=20, sd=0.000001) we just get probability 0, which makes sense.
+We conclude, that for our purposes it is therefore sufficient to replace NaNs with 1-(1e-30), whenever they occur.
+
+* How should we plot the results in this file? Should we extract maybe the frac.vec.Drysdale values that were used for the selections to be acceptable and draw a point in the power plot on their average. It could be misleading that the lines for Drysdale/split go so far. But on the other hand if we were to make the simulations up to fractions of 0.99 they would probably exhibit some kind of plateau anyways as their used fractions would always be lowered to some working fraction. Nevertheless if we keep the plot this way, we should somehow write what fraction was the highest possible to be really used for the values in the plot.
+
+
+## Paul 3rd \& 4th of May:
+
+Ran simulations for nsim=200, $s=5, \sigma^2=2$ on the parallelized_different_fraqs with. In Figure 13 you can see the results. Note that only a few truly active variables are involved, $\hat \beta^{Drysdale}$ stil only has to change its fraqs quite rarely and performs quite well.
+
+
+\begin{figure}[htbp]
+\centering
+\subfloat[Power]{
+  \includegraphics[width=0.49\linewidth]{plots/PowerPlot_diff_fraqs_s=5_sigma=2.png}
+}
+\subfloat[Type I error]{
+  \includegraphics[width=0.49\linewidth]{plots/TypeIPlot_diff_fraqs_s=5_sigma=2.png}
+}
+\caption{Distribution of p-values for $n=100, p=200, s=15, \sigma=1, n_{sim}=200$}
+\label{fig:subfigures_s=15}
+\end{figure}
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

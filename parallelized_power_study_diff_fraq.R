@@ -340,7 +340,7 @@ cat("Total time needed for simulation:")
 print(total.time)
 
 #save.image(file='myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
-#load('myEnvironment.RData')
+#load('myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
 # --------------- Create plots --------------
 
 data_Power <- data.frame(
@@ -356,14 +356,16 @@ labels_fraqs_D<-c(rep("",f), rep(round(avg_fraq.vec.Drysdale,3), 3))
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 
 PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() + geom_point() +
-  geom_text(label=labels_fraqs_D, nudge_x=0.03, nudge_y=0.03) +
-  labs(title = "Average Power",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+  geom_line() +
+#  geom_point() +
+#  geom_text(label=labels_fraqs_D, nudge_x=0.03, nudge_y=0.03) +
+  labs(title = "Average Power", x = "Fraq", y = "Value") +
+  theme_minimal() + 
+  scale_color_discrete(labels=c('Carving', 'Combined Carving', 'Split','PoSI')) +
+  theme(plot.title = element_text(hjust = 0.5))
 PowerPlot
 
-ggsave("PowerPlot_diff_fraqs.png", plot = PowerPlot, width = 8, height = 6,
+ggsave("PowerPlot_diff_fraqs_no_labels.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
@@ -378,16 +380,19 @@ data_TypeI <- data.frame(
 data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
 
 TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() + geom_point() +
-  geom_text(label=labels_fraqs_D, nudge_x=0.0002, nudge_y=0.0001) +
-  labs(title = "Average Type I Error Rate",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+  geom_line() +
+  #geom_point() +
+  #geom_text(label=labels_fraqs_D, nudge_x=0.0002, nudge_y=0.0001) +
+  labs(title = "Average Power", x = "Fraq", y = "Value") +
+  theme_minimal() + 
+  scale_color_discrete(labels=c('Carving', 'Combined Carving', 'Split','PoSI')) +
+  theme(plot.title = element_text(hjust = 0.5))
 
 TypeIPlot
 
-ggsave("TypeIPlot_diff_fraqs.png", plot = TypeIPlot, width = 8, height = 6,
+ggsave("TypeIPlot_diff_fraqs_no_labels.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
-TypeIPlot
-PowerPlot
+# Table for avg_fraq.vec.Drysdale:
+
+df_fraqs<-round(t(data.frame(original=fraq.vec, average=avg_fraq.vec.Drysdale)),3)

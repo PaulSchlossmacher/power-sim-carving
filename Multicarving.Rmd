@@ -488,6 +488,19 @@ Ran simulations for nsim=200, $s=5, \sigma^2=2$ on the parallelized_different_fr
 * Try for adjusted power or some other way of fair comparison or maybe argue that this wont help either, as christophs carving estimator has lower FDR and higher power 
 * discuss paper draft: red remarks, equation numeration, formatting and notation
 
+Things we'd  still like to do:
+
+* Adjusted power -by moving the $\alpha$
+
+* See how FWER plot from Filip looks in the diff_fraqs plots (Look out for PoSI when creating the plots)
+
+* How to adjust the numbers of the equations
+
+* Mention that $A_0$ and $A_1$ should be rbound in the PoSI chapter.
+
+* Change $\tilde S$ to $\hat S$
+
+* Change single entries of vectors from bold to non-bold
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

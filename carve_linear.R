@@ -348,10 +348,15 @@ beta.posi <- function(x, y, split, beta, lambda,
     warning("A.1%*%y.a>b.1, conditioning is not fulfilled")
   }
   
+  repl_for_1 = 1 - (1e-30)
+  
   pvals <- rep(1,p)
   for (i in 1:s){
-    #cdf<-pnormTrunc(q=beta_posi[i], mean=theta.2[i], sd=sqrt(tau.2[i]), min=vlo[i], max=vup[i])
     cdf<-ptruncnorm(q=beta_posi[i], a=vlo[i], b=vup[i], mean=theta.2[i], sd=sqrt(tau.2[i]))
+
+    #pnormTrunc can not handle probabilites that are very close to 1 - see Rmd file. Therefore:
+    cdf<-ifelse(is.nan(cdf), repl_for_1, cdf)
+    
     pv <- 2*min(cdf, 1-cdf)
     pvals[chosen[i]] <- pv
   }

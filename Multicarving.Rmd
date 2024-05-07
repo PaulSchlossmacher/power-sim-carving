@@ -502,6 +502,16 @@ Things we'd  still like to do:
 
 * Change single entries of vectors from bold to non-bold
 
+* Change definition of $\hat s$ ($\forall j \in \hat M$)
+
+* PoSI: Check whether $s=\#M_A, n_A$ get defined at any point before, define $\Sigma$ and mention the distribution of $\hat \beta^{PoSI}$, also explicitly put in what TN means.
+
+* 2.4: Replace $\hat \beta^D$ by $\hat \beta^{Comb}$
+
+* 2.5: Replace $X_j$ with $X^{(j)}$ 
+
+* Results: Put all our results in the results section on Overleaf
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

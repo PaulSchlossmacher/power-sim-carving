@@ -383,7 +383,7 @@ TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
   geom_line() +
   #geom_point() +
   #geom_text(label=labels_fraqs_D, nudge_x=0.0002, nudge_y=0.0001) +
-  labs(title = "Average Power", x = "Fraq", y = "Value") +
+  labs(title = "Average Type I error", x = "Fraq", y = "Value") +
   theme_minimal() + 
   scale_color_discrete(labels=c('Carving', 'Combined Carving', 'Split','PoSI')) +
   theme(plot.title = element_text(hjust = 0.5))

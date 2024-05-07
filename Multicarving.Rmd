@@ -480,6 +480,15 @@ Ran simulations for nsim=200, $s=5, \sigma^2=2$ on the parallelized_different_fr
 \label{fig:subfigures_s=15}
 \end{figure}
 
+## Topics for today
+
+* Discuss which plots we want in the final paper
+* Would it be good to have some symbol at fraction 1 for posi, to see if drysdale's max power outperforms the regular use case of posi
+* Copy the FWER tracking/plotting from the other parallelized power study
+* Try for adjusted power or some other way of fair comparison or maybe argue that this wont help either, as christophs carving estimator has lower FDR and higher power 
+* discuss paper draft: red remarks, equation numeration, formatting and notation
+
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

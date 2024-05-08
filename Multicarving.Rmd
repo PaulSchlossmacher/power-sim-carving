@@ -512,6 +512,10 @@ Things we'd  still like to do:
 
 * Results: Put all our results in the results section on Overleaf
 
+## Wednesday 8th May, corrections
+
+* Changed on page 8 of our paper $\mathcal{V}(y_A)$ to $\mathcal{V}(\mathbf{y}_A)_j$
+
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf
 

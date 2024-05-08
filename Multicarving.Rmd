@@ -496,15 +496,15 @@ Things we'd  still like to do:
 
 * How to adjust the numbers of the equations
 
-* Mention that $A_0$ and $A_1$ should be rbound in the PoSI chapter.
+* Mention that $A_0$ and $A_1$ should be rbound in the PoSI chapter. (Done)
 
 * Change $\tilde S$ to $\hat S$
 
 * Change single entries of vectors from bold to non-bold
 
-* Change definition of $\hat s$ ($\forall j \in \hat M$)
+* Change definition of $\hat s$ ($\forall j \in \hat M$) (Done)
 
-* PoSI: Check whether $s=\#M_A, n_A$ get defined at any point before, define $\Sigma$ and mention the distribution of $\hat \beta^{PoSI}$, also explicitly put in what TN means.
+* PoSI: Check whether $s=\#M_A, n_A$ get defined at any point before, define $\Sigma$ and mention the distribution of $\hat \beta^{PoSI}$, also explicitly put in what TN means. (Done)
 
 * 2.4: Replace $\hat \beta^D$ by $\hat \beta^{Comb}$
 
@@ -515,6 +515,18 @@ Things we'd  still like to do:
 ## Wednesday 8th May, corrections
 
 * Changed on page 8 of our paper $\mathcal{V}(y_A)$ to $\mathcal{V}(\mathbf{y}_A)_j$
+
+* I noticed that for the PoSI chapter I used $\textbf{y}$ instead of $\textbf{Y}$ in many cases, since this is also how Lee does it. However in order to stay consistent with both our notation and also how Christoph does it in the Multicarving paper, we actually need $\textbf{Y}$ even for $A \textbf{Y} \leq \textbf{b}$ and so on. While for me it does seem weird at first sight - especially for $(X^TX)^{-1}X^T Y$, Christoph does the same e.g on p.8 of his paper and the theory behind it seems sound.
+
+* Should the input $z$ in $\mathcal{V}^-$ also be in caps then? Probably, but I'd like to discuss it tbh, because it does also get defined through $(I_n-c \eta^T)y$
+
+Notes for the future: 
+
+* Both Lee and Drysdale actually write $TN(\ldots)$ instead of $\mathcal{T} \mathcal{N}(\ldots)$, so maybe we should also change it
+
+* What does Drysdale actually mean by writing $\mathcal{V}^-(y)$? Because Lee only defines $\mathcal{V}^-(z)$, where $z$ depends on $y$. Maybe he means the same by his notation, but just wants to avoid taking the route via the $z$. I think this might also be a good idea for our purposes, however we should clearly state it then. At the moment, we also write $\mathcal{V}^-(y)$ in the section, where we copy his Lemma.
+
+* I actually think it's nicer to define $\hat s=|\hat M|$. Is that ok or does it lead to any conflicts?
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

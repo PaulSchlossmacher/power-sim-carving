@@ -90,7 +90,7 @@ carve.lasso <- function(X, y, ind, beta, tol.beta, lambda, sigma = NULL, family 
   
   y1 <- y[ind]
   X1 <- X[ind, ]
-  X.E <- X[, chosen] # active variables on  full data set 
+  X.E <- as.matrix(X[, chosen]) # active variables on  full data set 
   X.Ei <- ginv(X.E)
   X.E1 <- X1[ ,chosen] # active variables on selection data set 
   X.Ei1 <- ginv(X.E1)
@@ -305,7 +305,11 @@ carve.lasso <- function(X, y, ind, beta, tol.beta, lambda, sigma = NULL, family 
     return(list(pv = pvalues))
   } else {
     # saturated model
-    X.o <- rbind(X.E[ind, ], X.E[-ind, ])
+
+    #X.o <- rbind(X.E[ind, ], X.E[-ind, ])
+    #Note: !I had to make this change in order to get the saturated version working!
+    X.o <- rbind(matrix(X.E[ind, ], ncol=s), matrix(X.E[-ind, ], ncol=s))
+    
     y.o <- c(y[ind], y[-ind])
     A1 <- -diag(z.E) %*% C %*% t(X.E1)
     A <- cbind(A1, matrix(0, nrow = dim(A1)[1], ncol = n - length(ind)))

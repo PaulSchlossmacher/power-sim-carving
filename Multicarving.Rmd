@@ -512,6 +512,8 @@ Things we'd  still like to do:
 
 * Results: Put all our results in the results section on Overleaf
 
+* Make sure all plots have 0-1 or sth else appropriate on the y-axis.
+
 ## Wednesday 8th May, corrections
 
 * Changed on page 8 of our paper $\mathcal{V}(y_A)$ to $\mathcal{V}(\mathbf{y}_A)_j$
@@ -527,6 +529,60 @@ Notes for the future:
 * What does Drysdale actually mean by writing $\mathcal{V}^-(y)$? Because Lee only defines $\mathcal{V}^-(z)$, where $z$ depends on $y$. Maybe he means the same by his notation, but just wants to avoid taking the route via the $z$. I think this might also be a good idea for our purposes, however we should clearly state it then. At the moment, we also write $\mathcal{V}^-(y)$ in the section, where we copy his Lemma.
 
 * I actually think it's nicer to define $\hat s=|\hat M|$. Is that ok or does it lead to any conflicts?
+
+## Paul Friday, 10th of May
+
+Tried implementing a simulation for the saturated viewpoint using selected=FALSE in Christoph's carve.lasso.
+
+Had a problem with this line in Christoph's code in cases, where exactly one variable got selected.
+
+```{r}
+X.o <- rbind(X.E[ind, ], X.E[-ind, ])
+```
+
+I went through it as follows, to try and solve it:
+
+```{r}
+A<-matrix(data=rnorm(10), nrow=10)
+B<-matrix(data=rnorm(20), nrow=10)
+ind=sample(rep(1:10), size=9)
+s_A=ncol(A)
+s_B=ncol(B)
+
+#This does not work when you only have one column:
+comb_A=rbind(A[ind, ], A[-ind, ])
+comb_B=rbind(B[ind, ], B[-ind, ])
+dim(comb_A)
+dim(comb_B)
+
+#This does not work when you only have one row:
+comb_A2=rbind(as.matrix(A[ind, ]), as.matrix(A[-ind, ]))
+comb_B2=rbind(as.matrix(B[ind, ]), as.matrix(B[-ind, ]))
+dim(comb_A2)
+dim(comb_B2)
+
+#This should work
+comb_A3=rbind(matrix(A[ind, ], ncol=s_A), matrix(A[-ind, ], ncol=s_A))
+comb_B3=rbind(matrix(B[ind, ], ncol=s_B), matrix(B[-ind, ], ncol=s_B))
+dim(comb_A3)
+dim(comb_B3)
+
+
+#Therefore: X.o <- rbind(matrix(X.E[ind, ], ncol=s), matrix(X.E[-ind, ], ncol=s))
+```
+
+
+Also:
+
+* When running the simulation, I had the issue of it aborting because $\beta^D$ could not be computed 200 times in a row. After talking with Filip, we decided to simply skip the run in these cases. I implemented it, by setting the p-values of all of $\beta^D, \beta^{PoSI}$ and $\beta^{Split}$ to 1 in the case where after 50 simulation runs the rank issue still remained. While we did thus lower the bar quite a bit, it still seems quite generous to be honest and will maybe allow for far quicker simulations in the future.
+
+* In the end I got the simulation to work for nsim=200 and f=11. Just the Type I plot looks bad at the moment, because the Type I errors for saturated are so bad. We can try working out sth else for that, since I did save the environment.
+
+* Just some notes for myself for debugging:
+    * When at some point all of the data points for power get set to 0, this tended to be, because I had not initialized a variable properly and referenced it later.
+    * When a point is completely missing in the plot, this tended to be, because NAs had been calculated for that fraction.
+    * For graver stuff in the parallelization file: Try replicating the error in the saturated_sim.R file, to be able to then extract the values where the problem in carve.lasso occurs. Then you can use browser() again. 
+
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

@@ -471,13 +471,13 @@ Ran simulations for nsim=200, $s=5, \sigma^2=2$ on the parallelized_different_fr
 \begin{figure}[htbp]
 \centering
 \subfloat[Power]{
-  \includegraphics[width=0.49\linewidth]{plots/PowerPlot_diff_fraqs_s=5_sigma=2.png}
+  \includegraphics[width=0.49\linewidth]{plots/PowerPlot_diff_fraqs_no_labels.png}
 }
 \subfloat[Type I error]{
-  \includegraphics[width=0.49\linewidth]{plots/TypeIPlot_diff_fraqs_s=5_sigma=2.png}
+  \includegraphics[width=0.49\linewidth]{plots/TypeIPlot_diff_fraqs_no_labels_s=5.png}
 }
 \caption{Distribution of p-values for $n=100, p=200, s=15, \sigma=1, n_{sim}=200$}
-\label{fig:subfigures_s=15}
+\label{fig:subfigures_diff_s=15}
 \end{figure}
 
 ## Topics for today
@@ -536,13 +536,13 @@ Tried implementing a simulation for the saturated viewpoint using selected=FALSE
 
 Had a problem with this line in Christoph's code in cases, where exactly one variable got selected.
 
-```{r}
+```{r, eval=FALSE}
 X.o <- rbind(X.E[ind, ], X.E[-ind, ])
 ```
 
 I went through it as follows, to try and solve it:
 
-```{r}
+```{r, eval=FALSE}
 A<-matrix(data=rnorm(10), nrow=10)
 B<-matrix(data=rnorm(20), nrow=10)
 ind=sample(rep(1:10), size=9)

@@ -1,4 +1,7 @@
-# Clear all variables
+# ----------- This file is for debugging only -----------------
+
+
+
 rm(list = ls())
 
 
@@ -24,12 +27,10 @@ library(hdi)
 library(selectiveInference)
 library(doSNOW)
 library(parallel)
-library(doParallel)
 library(doRNG)
 library(truncnorm)
-library(git2r)
 library(ggplot2)
-library(Rmpfr)
+
 
 source(hdi_adjustments_path)
 source(carving_path)
@@ -41,348 +42,283 @@ source(carve_linear_path)
 
 
 
-
-carve.saturated <- function(x, y, B = 50, fraction = 0.9, gamma = ((1:B)/B)[((1:B)/B) >= 0.05], FWER = FALSE, ci.level = 0.95,
-                                     family = "gaussian", model.selector = lasso.cvcoef,
-                                     args.model.selector = list(intercept = TRUE, standardize = FALSE),
-                                     se.estimator = "modwise", args.se.estimator = list(df.corr = TRUE, intercept = TRUE, standardize = FALSE),
-                                     args.lasso.inference = list(sigma = NA), ci.timeout = 10, split.pval = TRUE,
-                                     classical.fit = lm.pval, args.classical.fit = NULL, args.classical.ci = NULL,
-                                     parallel = FALSE, ncores = getOption("mc.cores", 2L),
-                                     return.nonaggr = FALSE, return.selmodels = FALSE, verbose = FALSE) {
-  # routine to split the data, select a model, calculate carving p-values B times and determine the corresponding CI
-  # Input
-  # x (matrix): matrix of predictors
-  # y (vector): response vector
-  # B (integer): number of splits
-  # fraction (numeric in (0,1)): fraction used for selection
-  # gamma (numeric or vector of numeric in (0,1]): quantiles to consider, if several, additional penalty is applied
-  # FWER (boolean): shall a FWER correction be applied
-  # ci.level (numeric in (0,1)): level of the confindence interval
-  # family (string): "gaussian" or "binomial"
-  # model.selector (function): how the model is chosen (must be some version of Lasso)
-  # args.model.selector (list): additional arguments for the selection process
-  # se.estimator (string): how sigma is estimated, "1se", "modwise", "min" or "None"
-  # args.se.estimator (list): additional arguments to estimate sigma
-  # args.lasso.inference (list): additional arguments for inference after Lasso
-  # ci.timeout (numeric > 0): maximum time to search for an uncovered point before setting the bound to Inf/ -Inf
-  # split.pval (boolean): shall p-values and confidence intervals for splitting be determined as well
-  # classical.fit (function): function to calculate splitting p-values
-  # args.classical.fit (list): additional arguments for calculating splitting p-values
-  # args.classical.ci (list): additional arguments for calculating splitting CI
-  # parallel (boolean): whether to parallelize the splits (CI calculation is never parallelized)
-  # ncores (integer): number of cores for parallelization
-  # return.nonaggr (boolean): shall raw p-values be returned
-  # return.sel.models (boolean): shall the information, which model was selected be returned
-  # verbose (boolean): whether to print key steps
-  # Output (if split.pval = TRUE,  a list of two output elements is created)
-  # pval.corr (p - vector): multicarving / multisplitting p-values
-  # gamma.min (p - vector): which value of gamma minimized the p-value
-  # ci.level (numeric in (0,1)): level of the confidence interval
-  # lci (p - vector): lower end of confidence interval
-  # uci (p - vector): upper end of confidence interval
-  # optional: pvals.nonaggr (B x p matrix): p-values before aggregation
-  # optional: sel.models (boolean B x p matrix): TRUE if variable was selected in given split
-  # FWER (boolean): was a multiplicity correction applied?
-  # only for carving: vlo (B x p matrix): lower end of constrained region
-  # only for carving: vup (B x p matrix): upper end of constrained region
-  # only for carving: centers (B x p matrix): estimate of parameter in given model
-  # ses (B x p matrix): estimate of standard error of parameter in given model
-  # method ("multi.carve" or "multi.split"): additional output information
-  # call: function call to obtain this carving result
-  
-
-  #---------- Note: I'm simplifying this code under the assumption that split.pval=FALSE, sigma is provided
-  
-  args.model.selector$family <- family
-  args.lasso.inference$family <- family
-  
-  # provided sigma has priority over se estimator
-  se.estimator <- "None"
-  globalSigma <- args.lasso.inference$sigma
-
-  
-  n <- nrow(x)
-  p <- ncol(x)
-  n.left <- floor(n * fraction)
-  n.right <- n - n.left
-  stopifnot(n.left >= 1, n.right >= 0)
-  oneSplit <- function(b) {
-    
-    pvals.v <- rep(1, p)
-    
-    sel.models <- logical(p)
-    vlo.v <- rep(-Inf, p)
-    vup.v <- rep(Inf, p)
-    estimates.v <- rep(NA, p)
-    sescarve.v <- rep(Inf, p)
-    lci.v <- rep(-Inf, p)
-    uci.v <- rep(Inf, p)
-    centers.v <- rep(NA, p)
-    ses.v <- rep(Inf, p)
-    df.res <- NA
-    try.again <- TRUE
-    thresh.count <- 0L
-    threshn <- 1e-7
-    continue <- TRUE
-    split.again <- TRUE
-    split.count <- 0
-    while (split.again) {
-      split.again <- FALSE
-      split <- sample.int(n, size = n.left)
-      x.left <- x[split, ]
-      y.left <- y[split]
-      x.right <- x[-split, ]
-      y.right <- y[-split]
-      
-      output <- do.call(model.selector, args = c(list(x = x.left, 
-                                                      y = y.left), args.model.selector))
-      sel.model <- output$sel.model
-      beta <- output$beta
-      lambda <- output$lambda
-      
-      fit.again <- TRUE
-      thresh.count <- 0
-      p.sel <- length(sel.model)
-      if (p.sel == 0) fit.again <- FALSE
-      
-      while (fit.again) {
-        fit.again <- FALSE
-        checktry <- tryCatch_W_E(constraint.checker(x.left, y.left, beta, 0, lambda, family,
-                                                    intercept = args.model.selector$intercept), TRUE)
-        if (is.null(checktry$error)) {
-          check <- checktry$value
-        } else {
-          check <- TRUE
-          split.again <- TRUE
-          warning(paste(checktry$error, p.sel, " variables selected with ",
-                        n.left, "data points, splitting again"))
-        }
-        if (!check) {
-          if (verbose) 
-            cat("......fit again...\n")
-          fit.again <- TRUE
-          thresh.count <- thresh.count + 1
-          if (thresh.count > 2) {
-            warning("Giving up reducing threshhold")
-            break()
-          }
-          threshn <- 1e-7 / (100) ^ thresh.count
-          fit <- glmnet(x = x.left,y = y.left,standardize = args.model.selector$standardize,
-                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
-          if (verbose) cat(threshn,"\n")
-          coefs <- coef(fit, x = x.left, y = y.left, s = lambda / n.left, exact = TRUE,
-                        standardize = args.model.selector$standardize,
-                        intercept = args.model.selector$intercept, thresh = threshn, family = family)
-          beta <- coefs[-1]
-          sel.model <- which(abs(beta) > 0)
-          
-          p.sel <- length(sel.model)
-          if (p.sel == 0) fit.again <- FALSE
-          warning(paste("reducing threshold", thresh.count, "to", threshn, sep = " "))
-        }
-      }
-      
-      p.sel <- length(sel.model)
-      # use new split in case of singularity. This is mostly an issue for discrete x.
-      if (args.model.selector$intercept) {
-        if ((p.sel > 0 && (rankMatrix(cbind(rep(1, n.left), x.left[, sel.model]))[[1]]< (p.sel + 1) ||
-                           (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[, sel.model]))[[1]] < (p.sel + 1)))) ||
-            fit.again) split.again <- TRUE
-      } else {
-        if ((p.sel > 1 && (rankMatrix(x.left[, sel.model])[[1]] < (p.sel) ||
-                           (p.sel < n.right  && rankMatrix(x.right[, sel.model])[[1]]< (p.sel)))) ||
-            fit.again) split.again <- TRUE
-      }
-      if (split.again) {
-        reason <- character(0)
-        if (args.model.selector$intercept){
-          if (rankMatrix(cbind(rep(1, n.left), x.left[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x1 rank")
-          if (p.sel < n.right - 1 && rankMatrix(cbind(rep(1, n.right), x.right[,sel.model]))[[1]] < (p.sel + 1)) reason <- c(reason, "x2 rank")
-        } else {
-          if (rankMatrix( x.left[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x1 rank")
-          if (p.sel < n.right && rankMatrix(x.right[,sel.model])[[1]] < (p.sel)) reason <- c(reason, "x2 rank")
-        }
-        
-        if (fit.again) reason <- c(reason, "fit")
-        if (!is.null(checktry$error)) reason <- c(reason, "error while checking")
-        split.count <- split.count + 1
-        if (split.count > 4) {
-          stop(paste("More than 5 splits needed, final reason:", reason))
-        }
-        if (verbose) 
-          cat("......Splitting again...\n")
-        warning(paste("Splitting again ", split.count, "reason", reason))
-      }
-    }
-    
-    if (p.sel > 0) {
-      fLItry <- tryCatch_W_E(do.call(carve.lasso,
-                                     args = c(list(X = x, y = y,ind = split, beta = beta, tol.beta = 0,
-                                                   lambda = lambda, intercept = args.model.selector$intercept,
-                                                   selected = FALSE), args.lasso.inference)), 0)
-      if (!is.null(fLItry$error)) {
-        warning(paste("Failed to infer a split, due to:", fLItry$error, sep=" "))
-        pvals.v[] = NA
-        list(pvals = pvals.v, sel.models = sel.models, centers = centers.v, 
-             ses = ses.v, df.res = df.res, lci = lci.v, uci = uci.v, sescarve = sescarve.v,
-             vlo = vlo.v, vup = vup.v, estimates= estimates.v, split = split)
-      } else if (!is.null(fLItry$warning)) {
-        for (war in unique(fLItry$warning)) {
-          warning(paste("Split", b, ":", war, sep = " "))
-        }
-      }
-      fLI <- fLItry$value
-      sel.pval1 <- fLI$pv
-      sel.vlo <- fLI$vlo
-      sel.vup <- fLI$vup
-      sel.sescarve <- fLI$ses
-      sel.estimates <- fLI$estimates
-      
-      if (any(is.na(sel.pval1))) {
-        stop("The carve procedure returned a p-value NA")
-      } 
-      
-      if (length(sel.pval1) != p.sel) { 
-        stop(paste("The carve procedure didn't return the correct number of p-values for the provided submodel.",
-                   p.sel, length(sel.pval1)))
-      }
-      if (!all(sel.pval1 >= 0 & sel.pval1 <= 1)) {
-        stop("The carve procedure returned values below 0 or above 1 as p-values")
-      }
-      sel.pval1 <- 2 * pmin(sel.pval1, 1 - sel.pval1)
-      if (FWER) {
-        sel.pval1 <- pmin(sel.pval1 * p.sel, 1) # for FWER
-      } else {
-        sel.pval1 <- pmin(sel.pval1, 1) # for FCR
-      }
-      
-      pvals.v[sel.model] <- sel.pval1
-      vlo.v[sel.model] <- sel.vlo
-      vup.v[sel.model] <- sel.vup
-      estimates.v[sel.model] <- sel.estimates
-      sescarve.v[sel.model] <- sel.sescarve
-      
-      if (return.selmodels) 
-        sel.models[sel.model] <- TRUE
-    }
-    
-    if (p.sel == 0) {
-      if (verbose) 
-        cat("......Empty model selected. That's ok...\n")
-    }
-    list(pvals = pvals.v, sel.models = sel.models, centers = centers.v, 
-         ses = ses.v, df.res = df.res, lci = lci.v, uci = uci.v, sescarve = sescarve.v,
-         vlo = vlo.v, vup = vup.v, estimates= estimates.v, split = split)
-  }
-  split.out <- if (parallel) {
-    stopifnot(isTRUE(is.finite(ncores)), ncores >= 1L)
-    if (verbose) 
-      cat("...starting parallelization of sample-splits for selection and constraints\n")
-    mclapply(1:B, oneSplit, mc.cores = ncores)
-  } else {
-    if (verbose)
-      cat("...selecting models and determing constraints\n")
-    lapply(1:B, oneSplit)
-  }
-  myExtract <- function(name) {
-    matrix(unlist(lapply(split.out, "[[", name)), nrow = B, 
-           byrow = TRUE)
-  }
-  if (verbose) 
-    cat("...determing confidence intervals\n")
-
-    pvals <- myExtract("pvals")
-  colnames(pvals) <- colnames(x)
-  if (return.selmodels) {
-    sel.models <- myExtract("sel.models")
-    colnames(sel.models) <- colnames(x)
-  } else {
-    sel.models <- NA
-  }
-  vlo <- myExtract("vlo")
-  vup <- myExtract("vup")
-  estimates <- myExtract("estimates")
-  sescarve <- myExtract("sescarve")
-  pvals.current <- which.gamma <- numeric(p)
-  for (j in 1:p) {
-    quant.gamma <- quantile(pvals[, j], gamma, na.rm = TRUE,type = 3) / gamma
-    penalty <- if (length(gamma) > 1) 
-      (1 - log(min(gamma)))
-    else 1
-    pvals.pre <- min(quant.gamma) * penalty
-    pvals.current[j] <- pmin(pvals.pre, 1)
-    which.gamma[j] <- which.min(quant.gamma)
-  }
-  names(pvals.current) <- names(which.gamma) <- colnames(x)
-  vars <- ncol(vlo)
-  s0 <- if (any(is.na(sel.models))) 
-    NA
-  else apply(sel.models, 1, sum)
-  new.ci <- mapply(aggregate.ci.saturated, vlo = split(vlo, rep(1:vars, each = B)),
-                   vup = split(vup, rep(1:vars, each = B)), 
-                   centers = split(estimates, rep(1:vars, each = B)), 
-                   ses = split(sescarve, rep(1:ncol(sescarve), each = B)), 
-                   gamma.min = min(gamma), multi.corr = FALSE, verbose = FALSE, timeout = ci.timeout,
-                   s0 = list(s0 = s0), ci.level = ci.level, var = 1:vars)
-  lci.current <- t(new.ci)[, 1]
-  uci.current <- t(new.ci)[, 2]
-  if (!return.nonaggr) 
-    pvals <- NA
-  names(lci.current) <- names(uci.current) <- names(pvals.current)
-  if (return.selmodels) {
-    keep <- c("return.selmodels", "x", "y", "gamma", "split.out", "FWER",
-              "pvals", "pvals.current", "which.gamma", "sel.models", "ci.level", 
-              "lci.current", "uci.current", "vlo", "vup", "sescarve", "estimates")
-    rm(list = setdiff(names(environment()), keep))
-  }
-  # structure(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma], 
-  #                ci.level = ci.level, lci = lci.current, uci = uci.current,
-  #                pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
-  #                vlo = vlo, vup = vup, centers = estimates, ses = sescarve,
-  #                method = "multi.carve", call = match.call()), class = "carve")
-  # 
-  return(list(pval.corr = pvals.current, gamma.min = gamma[which.gamma], 
-                 ci.level = ci.level, lci = lci.current, uci = uci.current,
-                 pvals.nonaggr = pvals, sel.models = sel.models, FWER = FWER,
-                 vlo = vlo, vup = vup, centers = estimates, ses = sescarve,
-                 method = "multi.carve", call = match.call()), class = "carve")
-  }
-}
-
-# toeplitz
+#-------------------- Toeplitz Carving simulation from Christoph ----------------------
 n <- 100
 p <- 200
 rho <- 0.6
+#fraq.vec <- c(0.5)
+fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
+#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
+#toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
-sel.index <- c(1, 5, 10, 15, 20)
-ind <- sel.index
+#More active variables than observations in Group B after the split:
+#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 sparsity <- 5
-set.seed(42) # to make different methods comparable, fix the x-matrix
-x <- mvrnorm(n, rep(0, p), Cov) 
-print (x[1,1])
-# should create the right x on D-MATH server, x[1 ,1] = 0.958
-sigma <- 2
+set.seed(42) 
+x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-y <- y.true + sigma * rnorm(n)
+SNR <- 1.713766 # value created for Toeplitz 0.6
+sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
+nsim <- 3
+
+#Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
+for (j in 1:dim(x)[2]){
+  xjbar<-mean(x[,j])
+  sigma_j<-sum((x[,j]-xjbar)^2)/(length(x[,j])-1)
+  for (i in 1:dim(x)[1]){
+    x[i,j]<-(x[i,j]-xjbar)/sqrt(sigma_j)
+  }
+}
+
+#Initialization of metrics we want to keep track of
+f <- length(fraq.vec)
+full_test_res_D <- matrix(rep(0,4*f), nrow = f)
+full_test_res_C <- matrix(rep(0,4*f), nrow = f)
+full_test_res_sat <- matrix(rep(0,4*f), nrow = f)
+full_power_avg_D <- rep(0,f)
+full_power_avg_C <- rep(0,f)
+full_power_avg_sat <- rep(0,f)
+full_type1_error_avg_D <- rep(0,f)
+full_type1_error_avg_C <- rep(0,f)
+full_type1_error_avg_sat <- rep(0,f)
+#Should count fails of drysdales estimator for a given fraction over nsim rounds
+drysdale.fails <- rep(0,f)
+
+for (fraq_ind in 1:f){
+  
+  test_res_D <- rep(0,4)
+  test_res_C <- rep(0,4)
+  test_res_sat <- rep(0,4)
+  counter <- 0
+  powers_D <- rep(0,nsim)
+  powers_C <- rep(0,nsim)
+  powers_sat <- rep(0,nsim)
+  type1_error_D <- rep(0,nsim)
+  type1_error_C <- rep(0,nsim)
+  type1_error_sat <- rep(0,nsim)
+  
+  for (i in 1:nsim){
+    print(i)
+    #get different selection events
+    select.again <- TRUE
+    empty_model <- FALSE
+    select.again.counter = 0
+    
+    set_D_pvals_to_1=FALSE
+    
+    while(select.again){
+      select.again <- FALSE
+      y <- y.true + sqrt(sigma_squ) * rnorm(n)
+      #Normalize y:
+      y<-(y-mean(y))
+      split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+      beta_tmp <- split.select.list$beta
+      if(sum(beta_tmp!=0)==0){
+        empty_model <- TRUE
+        p_vals_D_fwer <- rep(1,p)
+        p_vals_C_fwer <- rep(1,p)
+        p_vals_split_fwer <- rep(1,p)
+        p_vals_posi_fwer <- rep(1,p)
+        p_vals_sat_fwer <- rep(1,p)
+        print("0 variables where chosen by the lasso, but thats not a problem.t")
+      }
+      lambda <- split.select.list$lambda
+      split <- split.select.list$split
+      if(sum(beta_tmp!=0)>n*(1-fraq.vec[fraq_ind])){
+        select.again <- TRUE
+        select.again.counter <- select.again.counter + 1
+        print("Need to split again because we selected more variables than beta_D can handle")
+      }
+      
+      if (select.again.counter > 50){
+        print("Tried 50 many selection events and not one of them was conformable for beta_Drysdale. 
+                                                 Setting all p-values to 1 for this simulation run for beta^Drysdale, PoSI and Split")
+        set_D_pvals_to_1=TRUE
+        select.again=FALSE
+      }
+    }
+    
+    
+    if(!empty_model){
+      
+      #If beta^Drysdale could be computed, we do it now. Otherwise we set the p-vals to 1:
+      if (set_D_pvals_to_1==FALSE){
+        carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+        p_vals_D_nofwer <- carve_D$pvals
+        
+        p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
+        p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
+        
+      } else {
+        p_vals_D_nofwer <- rep(1,p)
+        p_vals_split_nofwer <- rep(1,p)
+        p_vals_posi_nofwer <- rep(1,p)
+      }
+      
+      #Compute pure p-values from Christoph's approach
+      
+      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                             lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+      p_vals_C_nofwer<-carve_C$pv
+      
+      
+      #Note: selected=FALSE for saturated model
+      carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                              lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
+      p_vals_sat_nofwer<-carve_sat$pv
+      
+      
+      #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+      p_vals_comp_C<-rep(1,p)
+      chosen <- which(abs(beta_tmp)>0)
+      p_vals_comp_C[chosen] <- p_vals_C_nofwer
+      
+      p_vals_comp_sat<-rep(1,p)
+      p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
+      
+      #Add FWER control with Bonferroni correction
+      model.size <- length(chosen)
+      p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+      p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+      p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
+      p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size,1)
+      p_vals_sat_fwer <- pmin(p_vals_sat_nofwer*model.size,1)
+      
+    }
+    
+    #false positives, true positives, true negatives, false negatives for Drysdales p-values
+    H0T_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==0)
+    H0F_Rej_D<-sum(p_vals_D_fwer<=0.05 & beta==1)
+    H0T_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==0)
+    H0F_N_Rej_D<-sum(p_vals_D_fwer>0.05 & beta==1)
+    
+    #false positives, true positives, true negatives, false negatives for Christoph's p-values
+    H0T_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==0)
+    H0F_Rej_C<-sum(p_vals_C_fwer<=0.05 & beta==1)
+    H0T_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==0)
+    H0F_N_Rej_C<-sum(p_vals_C_fwer>0.05 & beta==1)
+
+    #false positives, true positives, true negatives, false negatives for saturated's p-values
+    H0T_Rej_sat<-sum(p_vals_sat_fwer<=0.05 & beta==0)
+    H0F_Rej_sat<-sum(p_vals_sat_fwer<=0.05 & beta==1)
+    H0T_N_Rej_sat<-sum(p_vals_sat_fwer>0.05 & beta==0)
+    H0F_N_Rej_sat<-sum(p_vals_sat_fwer>0.05 & beta==1)
+        
+    #Collecting terms
+    test_res_D<-test_res_D + c(H0T_Rej_D,H0F_Rej_D,H0T_N_Rej_D,H0F_N_Rej_D)
+    test_res_C<- test_res_C + c(H0T_Rej_C,H0F_Rej_C,H0T_N_Rej_C,H0F_N_Rej_C)
+    test_res_sat<- test_res_sat + c(H0T_Rej_sat,H0F_Rej_sat,H0T_N_Rej_sat,H0F_N_Rej_sat)
+    #calculating power and type1 error for 1 round in simulation
+    powers_D[i] <- H0F_Rej_D/(length(sel.index))
+    powers_C[i] <- H0F_Rej_C/(length(sel.index))
+    powers_sat[i] <- H0F_Rej_sat/(length(sel.index))
+    type1_error_D[i] <- H0T_Rej_D/(p-length(sel.index))
+    type1_error_C[i] <- H0T_Rej_C/(p-length(sel.index))
+    type1_error_sat[i] <- H0T_Rej_sat/(p-length(sel.index))    
+  }
+  
+  #calculating averages over all rounds of one fraction
+  test_res_D_avg <- test_res_D/nsim
+  test_res_C_avg <- test_res_C/nsim
+  test_res_sat_avg <- test_res_sat/nsim
+  power_avg_D <- mean(powers_D)
+  power_avg_C <- mean(powers_C)
+  power_avg_sat <- mean(powers_sat)
+  type1_error_avg_D <- mean(type1_error_D)
+  type1_error_avg_C <- mean(type1_error_C)
+  type1_error_avg_sat <- mean(type1_error_sat)
+  
+  #Creating average confusion matrices obtained from one fraction
+  Testing_table_D_avg <- matrix(
+    test_res_D_avg,
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+  )
+  
+  Testing_table_C_avg <- matrix(
+    test_res_C_avg,
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+  )
+  
+  Testing_table_sat_avg <- matrix(
+    test_res_sat_avg,
+    nrow = 2,
+    byrow = TRUE,
+    dimnames = list(c("Rejected", "Not Rejected"), c("H0 True", "H0 False"))
+  )
+  #Printing results of one fraction to console
+  cat("Results for fraction", fraq.vec[fraq_ind], ":")
+  cat("The average confusion matrix of Drydales p-values over ", nsim, "calculations is: \n" )
+  print(Testing_table_D_avg)
+  cat("The average confusion matrix of Christoph's p-values over ", nsim, "calculations is: \n" )
+  print(Testing_table_C_avg)
+  
+  cat("The average power of Drysdales p-values:", power_avg_D)
+  cat("The average power of Christophs p-values:", power_avg_C)
+  cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D)
+  cat("The average type 1 error of Christophs p-values:", type1_error_avg_C)
+  
+  
+  #Store everything to create plots later
+  full_test_res_D[fraq_ind, ] <- test_res_D_avg
+  full_test_res_C[fraq_ind, ] <- test_res_C_avg
+  full_test_res_sat[fraq_ind, ] <- test_res_sat_avg
+  full_power_avg_D[fraq_ind] <- power_avg_D
+  full_power_avg_C[fraq_ind] <- power_avg_C
+  full_power_avg_sat[fraq_ind] <- power_avg_sat
+  full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
+  full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
+  full_type1_error_avg_sat[fraq_ind] <- type1_error_avg_sat
+  #collecting fails of drysdales estimator of one fraction 
+  drysdale.fails[fraq_ind] <- counter - nsim
+}
+
+#save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
+#load('myEnvironment.RData')
 
 
-B=1
-frac=0.7
 
-#gammavec <- round(seq(ceiling(0.05 * B) / B, 1 - 1 / B, by = 1 / B), 2)
-#+gammavec[1] <- 0.05999 # due to inconsistency for multisplitting CI
+# --------------- Create plots --------------
 
-gammavec <- 0.05999
+data_Power <- data.frame(
+  Fraq=fraq.vec,
+  "Avg Power Christoph" = full_power_avg_C,
+  "Avg Power Drysdale" = full_power_avg_D,
+  "Avg Power Saturated" = full_power_avg_sat
+)
 
-results<-multi.carve.ci.saturated(x, y, B = B, fraction = frac, ci.level = 0.95, 
-                         model.selector = lasso.cvcoef, classical.fit = lm.pval,
-                         parallel = FALSE, ncores = getOption("mc.cores", 2L), gamma = gammavec,
-                         args.model.selector = list(standardize = FALSE, intercept = TRUE,
-                                                    tol.beta = 0, use.lambda.min = FALSE),
-                         verbose = FALSE, ci.timeout = 10, FWER = FALSE, split.pval = TRUE,
-                         return.selmodels = TRUE, return.nonaggr = TRUE)
+data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 
-results
+PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+  geom_line() +
+  labs(title = "Average Power",
+       x = "Fraq", y = "Value") +
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+
+# ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
+
+
+data_TypeI <- data.frame(
+  Fraq=fraq.vec,
+  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
+  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D
+)
+
+data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+
+TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
+  geom_line() +
+  labs(title = "Average Type I Error Rate",
+       x = "Fraq", y = "Value") +
+  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
+
+# ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
+

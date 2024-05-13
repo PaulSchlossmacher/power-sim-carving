@@ -152,98 +152,98 @@ for(fraq_ind in  1:f){
   results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
                      .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
                                    "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
-                                     #get different selection events
-                                     select.again <- TRUE
-                                     empty_model <- FALSE
-                                     select.again.counter = 0
-                                     
-                                     set_D_pvals_to_1=FALSE
-                                     
-                                     while(select.again){
-                                       select.again <- FALSE
-                                       y <- y.true + sqrt(sigma_squ) * rnorm(n)
-                                       #Normalize y:
-                                       y<-(y-mean(y))
-                                       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-                                       beta_tmp <- split.select.list$beta
-                                       if(sum(beta_tmp!=0)==0){
-                                         empty_model <- TRUE
-                                         p_vals_D_fwer <- rep(1,p)
-                                         p_vals_C_fwer <- rep(1,p)
-                                         p_vals_split_fwer <- rep(1,p)
-                                         p_vals_posi_fwer <- rep(1,p)
-                                         p_vals_sat_fwer <- rep(1,p)
-                                         print("0 variables where chosen by the lasso, but thats not a problem.t")
-                                       }
-                                       lambda <- split.select.list$lambda
-                                       split <- split.select.list$split
-                                       if(sum(beta_tmp!=0)>n*(1-fraq.vec[fraq_ind])){
-                                         select.again <- TRUE
-                                         select.again.counter <- select.again.counter + 1
-                                         print("Need to split again because we selected more variables than beta_D can handle")
-                                       }
-                                       
-                                       if (select.again.counter > 50){
-                                         print("Tried 50 many selection events and not one of them was conformable for beta_Drysdale. 
-                                                 Setting all p-values to 1 for this simulation run for beta^Drysdale, PoSI and Split")
-                                         set_D_pvals_to_1=TRUE
-                                         select.again=FALSE
-                                       }
-                                     }
-                                     
-                                     if(!empty_model){
-                                       
-                                       #If beta^Drysdale could be computed, we do it now. Otherwise we set the p-vals to 1:
-                                       if (set_D_pvals_to_1==FALSE){
-                                         carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
-                                         p_vals_D_nofwer <- carve_D$pvals
-                                         
-                                         p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
-                                         p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
-                                         
-                                       } else {
-                                         p_vals_D_nofwer <- rep(1,p)
-                                         p_vals_split_nofwer <- rep(1,p)
-                                         p_vals_posi_nofwer <- rep(1,p)
-                                       }
-                                       
-                                       #Compute pure p-values from Christoph's approach
-                                       
-                                       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
-                                                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = TRUE)
-                                       p_vals_C_nofwer<-carve_C$pv
-                                      
-                                       
-                                       #Note: selected=FALSE for saturated model
-                                       carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
-                                                            lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = TRUE)
-                                       p_vals_sat_nofwer<-carve_sat$pv
-                                       
-                                       
-                                       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
-                                       p_vals_comp_C<-rep(1,p)
-                                       chosen <- which(abs(beta_tmp)>0)
-                                       p_vals_comp_C[chosen] <- p_vals_C_nofwer
-                                       
-                                       p_vals_comp_sat<-rep(1,p)
-                                       p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
-                                       
-                                       #Add FWER control with Bonferroni correction
-                                       model.size <- length(chosen)
-                                       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
-                                       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
-                                       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
-                                       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size,1)
-                                       p_vals_sat_fwer <- pmin(p_vals_sat_nofwer*model.size,1)
-                                       
-                                     }
-                                     
-                                     list(p_vals_D_fwer = p_vals_D_fwer, 
-                                          p_vals_C_fwer = p_vals_C_fwer,
-                                          p_vals_sat_fwer = p_vals_sat_fwer,
-                                          p_vals_split_fwer = p_vals_split_fwer,
-                                          p_vals_posi_fwer = p_vals_posi_fwer)
-                                   }
+         #get different selection events
+         select.again <- TRUE
+         empty_model <- FALSE
+         select.again.counter = 0
+         
+         set_D_pvals_to_1=FALSE
+         
+         while(select.again){
+           select.again <- FALSE
+           y <- y.true + sqrt(sigma_squ) * rnorm(n)
+           #Normalize y:
+           y<-(y-mean(y))
+           split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+           beta_tmp <- split.select.list$beta
+           if(sum(beta_tmp!=0)==0){
+             empty_model <- TRUE
+             p_vals_D_fwer <- rep(1,p)
+             p_vals_C_fwer <- rep(1,p)
+             p_vals_split_fwer <- rep(1,p)
+             p_vals_posi_fwer <- rep(1,p)
+             p_vals_sat_fwer <- rep(1,p)
+             print("0 variables where chosen by the lasso, but thats not a problem.t")
+           }
+           lambda <- split.select.list$lambda
+           split <- split.select.list$split
+           if(sum(beta_tmp!=0)>n*(1-fraq.vec[fraq_ind])){
+             select.again <- TRUE
+             select.again.counter <- select.again.counter + 1
+             print("Need to split again because we selected more variables than beta_D can handle")
+           }
+           
+           if (select.again.counter > 50){
+             print("Tried 50 many selection events and not one of them was conformable for beta_Drysdale. 
+                     Setting all p-values to 1 for this simulation run for beta^Drysdale, PoSI and Split")
+             set_D_pvals_to_1=TRUE
+             select.again=FALSE
+           }
+         }
+         
+         if(!empty_model){
+           
+           #If beta^Drysdale could be computed, we do it now. Otherwise we set the p-vals to 1:
+           if (set_D_pvals_to_1==FALSE){
+             carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+             p_vals_D_nofwer <- carve_D$pvals
+             
+             p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
+             p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
+             
+           } else {
+             p_vals_D_nofwer <- rep(1,p)
+             p_vals_split_nofwer <- rep(1,p)
+             p_vals_posi_nofwer <- rep(1,p)
+           }
+           
+           #Compute pure p-values from Christoph's approach
+           
+           carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                                  lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = TRUE)
+           p_vals_C_nofwer<-carve_C$pv
+          
+           
+           #Note: selected=FALSE for saturated model
+           carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                                lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = TRUE)
+           p_vals_sat_nofwer<-carve_sat$pv
+           
+           
+           #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+           p_vals_comp_C<-rep(1,p)
+           chosen <- which(abs(beta_tmp)>0)
+           p_vals_comp_C[chosen] <- p_vals_C_nofwer
+           
+           p_vals_comp_sat<-rep(1,p)
+           p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
+           
+           #Add FWER control with Bonferroni correction
+           model.size <- length(chosen)
+           p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+           p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+           p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
+           p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size,1)
+           p_vals_sat_fwer <- pmin(p_vals_sat_nofwer*model.size,1)
+           
+         }
+         
+         list(p_vals_D_fwer = p_vals_D_fwer, 
+              p_vals_C_fwer = p_vals_C_fwer,
+              p_vals_sat_fwer = p_vals_sat_fwer,
+              p_vals_split_fwer = p_vals_split_fwer,
+              p_vals_posi_fwer = p_vals_posi_fwer)
+       }
   toc()
   stopCluster(cl)
   #Fetch p-values obtained from parallel computation
@@ -386,5 +386,7 @@ TypeIPlot
 
 ggsave("TypeIPlot_nsim=200_s=5_sigma_squ=2_saturated.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
+
+
 
 #p_vals_posi_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals_split

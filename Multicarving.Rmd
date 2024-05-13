@@ -582,7 +582,34 @@ Also:
     * When at some point all of the data points for power get set to 0, this tended to be, because I had not initialized a variable properly and referenced it later.
     * When a point is completely missing in the plot, this tended to be, because NAs had been calculated for that fraction.
     * For graver stuff in the parallelization file: Try replicating the error in the saturated_sim.R file, to be able to then extract the values where the problem in carve.lasso occurs. Then you can use browser() again. 
+    
 
+## Monday 13th May, Meeting Filip & Paul:
+
+Went through Christoph's correction of our first draft:
+
+Questions for Christoph:
+
+* Email Drysdale
+* p. 9: Correction regarding $H_0$: Would it also be fine to take 2.3 and $\beta_j=0$
+* Ok to link the Github instead of putting the code into the appendix?
+* End of $\hat \beta^{PoSI}$: Here we wrote the distribution and the conditions for the truncated normal very formally. Is it ok to write a sentence after that, saying: From here onwards, we only write $\hat\beta \sim TN(..., \mathcal{V^-}(y))$ (i.e. only the conditioning, Drysdale also doesn't do it for example).
+* Clear up notation discussion (see comment next to 2.5.0.2)
+* Second red question - Yes, we can adapt what Christoph writes in his paper, but would be interesting, why we can do it like that
+* We've also thought before the issue of A being used both for the splits of Drysdale and the polyhedral constraints. However it should always be clear from the context which one is which. Can you think of a nice alternative, otherwise we think it'd be best to keep it like it is
+* Methodology for diff_fraq ok?
+* Approach to Sifan's paper ok?
+
+
+Bigger changes suggested by Christoph for us to do later:
+
+* Explain how and that the $A_0$ part in $\hat \beta^{PoSI}$ becomes 0.
+
+* Exchange all the cardinalities $\hat s$ by $\hat m$ (both for the general case in the PoSI section and also in the cases of $\hat M_A$)
+
+* Define $\hat \beta^{PoSI}$ properly
+
+* Add in each section which error we control (see his comment next to 2.5.0.1)
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

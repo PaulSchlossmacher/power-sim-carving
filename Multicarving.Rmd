@@ -494,21 +494,21 @@ Things we'd  still like to do:
 
 * See how FWER plot from Filip looks in the diff_fraqs plots (Look out for PoSI when creating the plots)
 
-* How to adjust the numbers of the equations
+* How to adjust the numbers of the equations (Done)
 
 * Mention that $A_0$ and $A_1$ should be rbound in the PoSI chapter. (Done)
 
-* Change $\tilde S$ to $\hat S$
+* Change $\tilde S$ to $\hat M$ (Done)
 
-* Change single entries of vectors from bold to non-bold
+* Change single entries of vectors from bold to non-bold (Done)
 
 * Change definition of $\hat s$ ($\forall j \in \hat M$) (Done)
 
 * PoSI: Check whether $s=\#M_A, n_A$ get defined at any point before, define $\Sigma$ and mention the distribution of $\hat \beta^{PoSI}$, also explicitly put in what TN means. (Done)
 
-* 2.4: Replace $\hat \beta^D$ by $\hat \beta^{Comb}$
+* 2.4: Replace $\hat \beta^D$ by $\hat \beta^{Comb}$ (Done)
 
-* 2.5: Replace $X_j$ with $X^{(j)}$ 
+* 2.5: Replace $X_j$ with $X^{(j)}$ (Done, but differently)
 
 * Results: Put all our results in the results section on Overleaf
 
@@ -591,14 +591,20 @@ Went through Christoph's correction of our first draft:
 Questions for Christoph:
 
 * Email Drysdale
+    * email is good, just ask maybe if drysdale has had some concerns as well for his estimator
 * p. 9: Correction regarding $H_0$: Would it also be fine to take 2.3 and $\beta_j=0$
 * Ok to link the Github instead of putting the code into the appendix?
 * End of $\hat \beta^{PoSI}$: Here we wrote the distribution and the conditions for the truncated normal very formally. Is it ok to write a sentence after that, saying: From here onwards, we only write $\hat\beta \sim TN(..., \mathcal{V^-}(y))$ (i.e. only the conditioning, Drysdale also doesn't do it for example).
+    * Christoph says that this is okey, we can do whatever we seem to be more appropriate and understandable for the reader
 * Clear up notation discussion (see comment next to 2.5.0.2)
+    * We can leave A and B, just set a notation which is consistent troughout all of the paper
 * Second red question - Yes, we can adapt what Christoph writes in his paper, but would be interesting, why we can do it like that
+    * the hypothesis $H_0$ is kinda implicit inside of$AY \leq b$,maybe mention that in the paper
 * We've also thought before the issue of A being used both for the splits of Drysdale and the polyhedral constraints. However it should always be clear from the context which one is which. Can you think of a nice alternative, otherwise we think it'd be best to keep it like it is
 * Methodology for diff_fraq ok?
+    * reducing fractions is a bit problematic, because we condition only on last selection event but already looked alot at the data, but interesting to see from where on the fraction is capped and kind of find drysdales maximum possible power if the best frac was known from the beginning
 * Approach to Sifan's paper ok?
+    * mostly focus on the transformation to unit cube and give an outlook
 
 
 Bigger changes suggested by Christoph for us to do later:
@@ -607,9 +613,15 @@ Bigger changes suggested by Christoph for us to do later:
 
 * Exchange all the cardinalities $\hat s$ by $\hat m$ (both for the general case in the PoSI section and also in the cases of $\hat M_A$)
 
+* Check whether all of the $\hat{M}$ are really consistent 
+
 * Define $\hat \beta^{PoSI}$ properly
 
 * Add in each section which error we control (see his comment next to 2.5.0.1)
+    * Here this would maybe be best in section 2.1 to just mention the selective type one error too, and just stick onto christophs notation regarding the subscript in the probability symbol, as this is the setting under which we look at the probability
+
+* Change FWER dots to symbols and power lines to something visible in black and white format
+* Set all p-values to 1 if drysdales/splitting estimator is not working
 
 # Further literature
 * PDF Selective inference Lee: https://cran.r-project.org/web/packages/selectiveInference/selectiveInference.pdf

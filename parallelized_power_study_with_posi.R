@@ -170,7 +170,7 @@ for(fraq_ind in  1:f){
         p_vals_C_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
         p_vals_posi_fwer <- rep(1,p)
-        print("0 variables where chosen by the lasso, but thats not a problem.t")
+        print("0 variables where chosen by the lasso, but thats not a problem.")
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split

@@ -381,9 +381,10 @@ print(total.time)
 rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated_selections)
 print(rep_select_df)
 
-
+#Save or load existing simulation environments
 #save.image(file='Environment_s=5_SNR=1,5.RData')
 #load('myEnvironment.RData')
+
 # --------------- Create plots --------------
 
 #Need those NA's to integrate posi at fraction 1
@@ -422,11 +423,11 @@ FWER_points_adjusted <- FWER_points_long %>%
 
 
 
-PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
-  geom_line() +
+PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
+  geom_line(na.rm = TRUE) +
   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3) +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3) +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3, na.rm = TRUE) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3, na.rm = TRUE) +
   labs(title = "Average Power and FWER",
        x = "Fractions used for selection", y = "Value") +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
@@ -435,8 +436,8 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
 print(PowerPlot)
-ggsave("main_plot_s=5_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
+# ggsave("main_plot_s=5_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
 

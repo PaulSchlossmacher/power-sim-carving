@@ -1,5 +1,5 @@
 
-#This is actually the one_split function from Christophs multi.carve function in hdi_adjustments
+#This is actually the one_split function from the multicarving repository, taken from multi.carve function in hdi_adjustments
 
 split.select <- function(x,y,fraction = 0.9, family = "gaussian",model.selector = lasso.cvcoef, 
                             args.model.selector = list(intercept = FALSE, standardize = FALSE)) {

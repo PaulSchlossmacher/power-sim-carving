@@ -10,7 +10,7 @@
 #'
 #' @return list containing p-values of combined carving estimator and all of the inputs used for SNTN_distribution
 
-carve.linear <- function(x, y, split, beta, lambda,sigma_squ){
+carve.comb <- function(x, y, split, beta, lambda,sigma_squ){
   
   #Split the data
   n <- length(y)

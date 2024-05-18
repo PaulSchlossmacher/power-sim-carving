@@ -2,17 +2,17 @@
 rm(list = ls())
 
 
-#Local, user specific path, that should work for both of us:
+#Local & user specific path
 Local_path<-getwd()
-hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
+hdi_adjustments_path<-paste(Local_path, "/multicarving_paper/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/multicarving_paper/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/multicarving_paper/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/multicarving_paper/inference/tryCatch-W-E.R", sep="")
 
-#Different paths here, because they're "our own" functions
+#Different paths here, because they're in a different directory
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
 split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
-carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+carve_combined_path<-paste(Local_path, "/carve_combined.R", sep="")
 
 
 library(MASS)
@@ -27,7 +27,6 @@ library(parallel)
 library(doParallel)
 library(doRNG)
 library(truncnorm)
-library(git2r)
 library(ggplot2)
 
 
@@ -37,19 +36,19 @@ source(sample_from_truncated_path)
 source(tryCatchWE_path)
 source(SNTN_distribution_path)
 source(split_select_function_path)
-source(carve_linear_path)
+source(carve_combined_path)
 
 
 
-#-------------------- Toeplitz Carving simulation from Christoph ----------------------
+#-------------------- Toeplitz simulation from Multicarving paper ----------------------
 n <- 100
 p <- 200
 rho <- 0.6
 #fraq.vec <- c(0.7,0.8,0.9) #to reproduce the error
 #fraq.vec <- c(0.5,0.6,0.7,0.8)
 
-#fraq.vec <- c(0.5, 0.95)
-fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
+fraq.vec <- c(0.5, 0.95)
+#fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
 
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
@@ -64,10 +63,10 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 200
+nsim <- 3
 sig.level <- 0.05
 new_fraq_threshold<-0
-fraq.vec.Drysdale<-fraq.vec
+fraq.vec.comb<-fraq.vec
 
 total.time <- 0
 start.time <- Sys.time()
@@ -131,8 +130,8 @@ full_FWER_D <- rep(0,f)
 full_FWER_C <- rep(0,f)
 full_FWER_split <- rep(0,f)
 full_FWER_posi <- rep(0,f)
-# To keep track of the average fraq used for beta^Drysdale over all simulation runs:
-avg_fraq.vec.Drysdale<-rep(0,f)
+# To keep track of the average fraq used for beta^comb over all simulation runs:
+avg_fraq.vec.comb<-rep(0,f)
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(42)
@@ -153,111 +152,104 @@ for(fraq_ind in  1:f){
   results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
                      .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
                                    "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
-                                     #Initialise fraq.vec.Drysdale
-                                     fraq.vec.Drysdale <- fraq.vec
-                                     
-                                     
-                                     #get different selection events
-                                     empty_model_C <- FALSE
-                                     empty_model_D <- FALSE
-                                     counter_new_split <- 0
-                                     y <- y.true + sqrt(sigma_squ) * rnorm(n)
-                                     
-                                     #Normalize y:
-                                     y<-(y-mean(y))
-                                     split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-                                     beta_tmp <- split.select.list$beta
-                                     if(sum(beta_tmp!=0)==0){
-                                       empty_model_C <- TRUE
-                                       empty_model_D <- TRUE
-                                       p_vals_D_fwer <- rep(1,p)
-                                       p_vals_C_fwer <- rep(1,p)
-                                       p_vals_split_fwer <- rep(1,p)
-                                       p_vals_posi_fwer <- rep(1,p)
-                                       print("0 variables where chosen by the lasso, but thats not a problem.t")
-                                     }
-                                     lambda <- split.select.list$lambda
-                                     split <- split.select.list$split
-                                     
-                                     # --------- Extra variable selection for beta^Drysdale ------------------
-                                     
-                                     split.select.list_D<-split.select.list
-                                     beta_tmp_D<-split.select.list_D$beta
-                                     lambda_D <- split.select.list_D$lambda
-                                     split_D <- split.select.list_D$split
-                                     
-                                     # While the inverse can not be calculated: 
-                                     
-                                     #Note: We discarded the original condition with the minimum, because the Lasso should only select
-                                     # s<=min{n_A,p} variables anyways.
-                                     #while(sum(beta_tmp_D!=0)>min(n*fraq.vec.Drysdale[fraq_ind], n*(1-fraq.vec.Drysdale[fraq_ind]))){
-                                     while(sum(beta_tmp_D!=0)>n*(1-fraq.vec.Drysdale[fraq_ind])){
-                                       #Try new split with less observations for screening:
-                                       
-                                       if (counter_new_split>=new_fraq_threshold){
-                                         fraq.vec.Drysdale[fraq_ind]<-fraq.vec.Drysdale[fraq_ind]-0.025
-                                       }
-                                       
-                                       split.select.list_D <- split.select(x,y,fraction = fraq.vec.Drysdale[fraq_ind])
-                                       beta_tmp_D <- split.select.list_D$beta
-                                       lambda_D <- split.select.list_D$lambda
-                                       split_D <- split.select.list_D$split
-                                       
-                                       counter_new_split<-counter_new_split+1
-                                     }
-                                     
-                                     #Note: Since this only applies if the empty model gets selected and the Drysdale controls etc.
-                                     #should not kick in here, we don't have to differentiate between different splits here
-                                     if(sum(beta_tmp_D!=0)==0){#CHANGED TO beta_tmp_D from beta_tmp, PLEASE CHECK IF THIS IS RIGHT
-                                       empty_model_D <- TRUE
-                                       p_vals_D_fwer <- rep(1,p)
-                                       #p_vals_C_fwer <- rep(1,p) #THIS LINE SHOULD NOT BE NECESSARILY CALLED IF ONLY DRYSDALES MODEL IS EMPTY
-                                       p_vals_split_fwer <- rep(1,p)
-                                       p_vals_posi_fwer <- rep(1,p)
-                                       print("0 variables where chosen by the lasso, but thats not a problem.")
-                                     }
-                                     #Compute pure p-values from Drysdale's and Christoph's approach
-                                     if(!empty_model_C){
-                                       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
-                                                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
-                                       p_vals_C_nofwer<-carve_C$pv
-                                       
-                                       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
-                                       p_vals_comp_C<-rep(1,p)
-                                       chosen_C <- which(abs(beta_tmp)>0)
-                                       p_vals_comp_C[chosen_C] <- p_vals_C_nofwer
-                                       
-                                       #Add FWER control with Bonferroni correction
-                                       model.size_C <- length(chosen_C)
-                                       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size_C, 1)
-                                       
-                                       
-                                     }
-                                     # I decided to include all of posi, split and Drysdale in the case of whether
-                                     # Or not beta^Drysdale can be computed, since we work with fraq>0.7 anyways, so
-                                     # beta^Posi not working shouldn't really be an issue
-                                     
-                                     if (!empty_model_D){
-                                       carve_D <-carve.linear(x,y,split = split_D, beta = beta_tmp_D, lambda = lambda_D, sigma=sigma_squ)
-                                       p_vals_D_nofwer <- carve_D$pvals
-                                       p_vals_split_nofwer <- beta.split(x, y, split=split_D, beta = beta_tmp_D, sigma=sigma_squ)$pvals_split
-                                       p_vals_posi_nofwer <- beta.posi(x, y, split=split_D, beta = beta_tmp_D,lambda=lambda_D, sigma=sigma_squ)$pvals#CHANGED LAMBDA TO LAMBDA_D
-                                       
-                                       chosen_D <- which(abs(beta_tmp_D)>0)
-                                       model.size_D<- length(chosen_D)
-                                       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size_D, 1)
-                                       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size_D,1)
-                                       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size_D,1)
-                                       
-                                     }
-                                     
-                                     
-                                     list(p_vals_D_fwer = p_vals_D_fwer, 
-                                          p_vals_C_fwer = p_vals_C_fwer,
-                                          p_vals_split_fwer = p_vals_split_fwer,
-                                          p_vals_posi_fwer = p_vals_posi_fwer,
-                                          fraq.Drysdale = fraq.vec.Drysdale[fraq_ind])
-                                   }
+     #Initialise fraq.vec.comb
+     fraq.vec.comb <- fraq.vec
+     
+     
+     #get different selection events
+     empty_model_C <- FALSE
+     empty_model_D <- FALSE
+     counter_new_split <- 0
+     y <- y.true + sqrt(sigma_squ) * rnorm(n)
+     
+     #Normalize y:
+     y<-(y-mean(y))
+     split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+     beta_tmp <- split.select.list$beta
+     if(sum(beta_tmp!=0)==0){
+       empty_model_C <- TRUE
+       empty_model_D <- TRUE
+       p_vals_D_fwer <- rep(1,p)
+       p_vals_C_fwer <- rep(1,p)
+       p_vals_split_fwer <- rep(1,p)
+       p_vals_posi_fwer <- rep(1,p)
+       print("0 variables where chosen by the lasso, but thats not a problem.t")
+     }
+     lambda <- split.select.list$lambda
+     split <- split.select.list$split
+     
+     # --------- Extra variable selection for beta^comb ------------------
+     
+     split.select.list_D<-split.select.list
+     beta_tmp_D<-split.select.list_D$beta
+     lambda_D <- split.select.list_D$lambda
+     split_D <- split.select.list_D$split
+     
+     # While the inverse can not be calculated: 
+     while(sum(beta_tmp_D!=0)>n*(1-fraq.vec.comb[fraq_ind])){
+       #Try new split with less observations for screening:
+       
+       if (counter_new_split>=new_fraq_threshold){
+         fraq.vec.comb[fraq_ind]<-fraq.vec.comb[fraq_ind]-0.025
+       }
+       
+       split.select.list_D <- split.select(x,y,fraction = fraq.vec.comb[fraq_ind])
+       beta_tmp_D <- split.select.list_D$beta
+       lambda_D <- split.select.list_D$lambda
+       split_D <- split.select.list_D$split
+       
+       counter_new_split<-counter_new_split+1
+     }
+     
+     if(sum(beta_tmp_D!=0)==0){
+       empty_model_D <- TRUE
+       p_vals_D_fwer <- rep(1,p)
+       p_vals_split_fwer <- rep(1,p)
+       p_vals_posi_fwer <- rep(1,p)
+       print("0 variables where chosen by the lasso, but thats not a problem.")
+     }
+     #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
+     if(!empty_model_C){
+       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+       p_vals_C_nofwer<-carve_C$pv
+       
+       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+       p_vals_comp_C<-rep(1,p)
+       chosen_C <- which(abs(beta_tmp)>0)
+       p_vals_comp_C[chosen_C] <- p_vals_C_nofwer
+       
+       #Add FWER control with Bonferroni correction
+       model.size_C <- length(chosen_C)
+       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size_C, 1)
+       
+       
+     }
+     # I decided to include all of posi, split and combined carving in the case of whether
+     # Or not beta^comb can be computed, since we work with fraq>0.7 anyways, so
+     # beta^Posi not working shouldn't really be an issue
+     
+     if (!empty_model_D){
+       carve_D <-carve.comb(x,y,split = split_D, beta = beta_tmp_D, lambda = lambda_D, sigma=sigma_squ)
+       p_vals_D_nofwer <- carve_D$pvals
+       p_vals_split_nofwer <- beta.split(x, y, split=split_D, beta = beta_tmp_D, sigma=sigma_squ)$pvals_split
+       p_vals_posi_nofwer <- beta.posi(x, y, split=split_D, beta = beta_tmp_D,lambda=lambda_D, sigma=sigma_squ)$pvals#CHANGED LAMBDA TO LAMBDA_D
+       
+       chosen_D <- which(abs(beta_tmp_D)>0)
+       model.size_D<- length(chosen_D)
+       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size_D, 1)
+       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size_D,1)
+       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size_D,1)
+       
+     }
+     
+     
+     list(p_vals_D_fwer = p_vals_D_fwer, 
+          p_vals_C_fwer = p_vals_C_fwer,
+          p_vals_split_fwer = p_vals_split_fwer,
+          p_vals_posi_fwer = p_vals_posi_fwer,
+          fraq.comb = fraq.vec.comb[fraq_ind])
+   }
   toc()
   stopCluster(cl)
   #Fetch p-values obtained from parallel computation
@@ -299,16 +291,15 @@ for(fraq_ind in  1:f){
   FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
-  plot_conf_matrix(test_res_D_avg,"Drysdale's", nsim)
-  plot_conf_matrix(test_res_C_avg,"Christoph's", nsim)
-  cat("The average power of Drysdales p-values:", power_avg_D, "\n")
-  cat("The average power of Christophs p-values:", power_avg_C,"\n")
+  plot_conf_matrix(test_res_D_avg,"Combined Carving", nsim)
+  plot_conf_matrix(test_res_C_avg,"Carving", nsim)
+  cat("The average power of combined carving p-values:", power_avg_D, "\n")
+  cat("The average power of carving p-values:", power_avg_C,"\n")
   cat("The average power of splitting p-values:", power_avg_split,"\n")
   cat("The average power of posi p-values:", power_avg_posi,"\n")
-  #cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
-  #cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
-  cat("The FWER of Drysdales p-values:", FWER_D,"\n")
-  cat("The FWER of Christophs p-values:", FWER_C,"\n")
+
+  cat("The FWER of combined carvings p-values:", FWER_D,"\n")
+  cat("The FWER of carvings p-values:", FWER_C,"\n")
   cat("The FWER of splitting p-values:", FWER_split,"\n")
   cat("The FWER of posi p-values:", FWER_posi,"\n")
   #Store everything to create plots later
@@ -330,8 +321,8 @@ for(fraq_ind in  1:f){
   full_FWER_posi[fraq_ind] <- FWER_posi
   
   
-  #Storing fraq.vec.Drysdale:
-  avg_fraq.vec.Drysdale[fraq_ind] = do.call(sum, results$fraq.Drysdale)/nsim 
+  #Storing fraq.vec.comb:
+  avg_fraq.vec.comb[fraq_ind] = do.call(sum, results$fraq.comb)/nsim 
 }
 
 end.time <- Sys.time()
@@ -345,13 +336,13 @@ print(total.time)
 
 data_Power <- data.frame(
   Fraq=fraq.vec,
-  "Avg Power Christoph" = full_power_avg_C,
-  "Avg Power Drysdale" = full_power_avg_D,
+  "Avg Power Carving" = full_power_avg_C,
+  "Avg Power Combined Carving" = full_power_avg_D,
   "Avg Power Splitting" = full_power_avg_split,
   "Avg Power Posi" = full_power_avg_posi
 )
 
-labels_fraqs_D<-c(rep("",f), rep(round(avg_fraq.vec.Drysdale,3), 3))
+labels_fraqs_D<-c(rep("",f), rep(round(avg_fraq.vec.comb,3), 3))
 
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 
@@ -371,8 +362,8 @@ ggsave("PowerPlot_diff_fraqs_no_labels.png", plot = PowerPlot, width = 8, height
 
 data_TypeI <- data.frame(
   Fraq=fraq.vec,
-  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
-  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D,
+  "Avg Type I Error rate Carving" = full_type1_error_avg_C,
+  "Avg Type I Error rate Combined Carving" = full_type1_error_avg_D,
   "Avg Type I Error rate Splitting" = full_type1_error_avg_split,
   "Avg Type I Error rate Posi" = full_type1_error_avg_posi
 )
@@ -393,6 +384,6 @@ TypeIPlot
 ggsave("TypeIPlot_diff_fraqs_no_labels.png", plot = TypeIPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
-# Table for avg_fraq.vec.Drysdale:
+# Table for avg_fraq.vec.comb:
 
-df_fraqs<-round(t(data.frame(original=fraq.vec, average=avg_fraq.vec.Drysdale)),3)
+df_fraqs<-round(t(data.frame(original=fraq.vec, average=avg_fraq.vec.comb)),3)

@@ -46,15 +46,14 @@ p <- 200
 rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
-fraq.vec <- c(0.5, 0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+#fraq.vec <- c(0.5, 0.9)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
-#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
-sel.index <- c(1,5,10,15,20)
+sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+#sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
-sparsity <- 5
 #RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
@@ -63,7 +62,7 @@ y.true <- x %*% beta
 SNR = 1.5
 sigma_squ = drop(var(y.true)) / SNR
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 3
+nsim <- 300
 sig.level <- 0.05
 flexible_selection  <- FALSE #should we allow more selections for data splitting approach
 flexible_selection_count <- 50
@@ -111,26 +110,32 @@ plot_conf_matrix <- function(test_res_avg, name, nsim){
 
 
 #Initialization of metrics we want to keep track of
+#Note posi fraq will be computed on same selected data as data splitting, whereas just
+#posi data is computed on fraction = 1, so on all of the data
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
 full_test_res_split <- matrix(rep(0,4*f), nrow = f)
 full_test_res_posi <- matrix(rep(0,4*f), nrow = f)
+full_test_res_posi_fraq <- matrix(rep(0,4*f), nrow = f)
 full_test_res_sat <- matrix(rep(0,4*f), nrow = f)
 full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_power_avg_split <- rep(0,f)
 full_power_avg_posi <- rep(0,f)
+full_power_avg_posi_fraq <- rep(0,f)
 full_power_avg_sat <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
 full_type1_error_avg_split <- rep(0,f)
 full_type1_error_avg_posi <- rep(0,f)
+full_type1_error_avg_posi_fraq <- rep(0,f)
 full_type1_error_avg_sat <- rep(0,f)
 full_FWER_D <- rep(0,f)
 full_FWER_C <- rep(0,f)
 full_FWER_split <- rep(0,f)
 full_FWER_posi <- rep(0,f)
+full_FWER_posi_fraq <- rep(0,f)
 full_FWER_sat <- rep(0,f)
 
 log.vec <- vector("list",length(fraq.vec))
@@ -176,6 +181,7 @@ for(fraq_ind in  1:f){
         empty_model <- TRUE
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
+        p_vals_posi_fraq_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
         p_vals_sat_fwer <- rep(1,p)
         logs <- c(logs,"0 variables where chosen by the lasso, but thats not a problem.")
@@ -185,12 +191,12 @@ for(fraq_ind in  1:f){
       if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && flexible_selection){
         select.again <- TRUE
         select.again.counter <- select.again.counter + 1
-        #print("Need to split again because we selected more variables than beta_D & beta_split can handle")
         logs <- c(logs,"Need to split again because we selected more variables than beta_D & beta_split can handle")
       }
       else if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && !flexible_selection){
         p_vals_D_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
+        p_vals_posi_fraq_fwer <- rep(1,p)
         splitting_estimator_failed <- TRUE
         logs <- c(logs,"Set splitting and carve.comb p_vals to 1, because we selected more variables than beta_D & beta_split can handle")
         
@@ -214,7 +220,9 @@ for(fraq_ind in  1:f){
       p_vals_sat_nofwer<-carve_sat$pv
       
       p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
-
+      
+      p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
+      
       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
       p_vals_comp_C<-rep(1,p)
       chosen <- which(abs(beta_tmp)>0)
@@ -227,6 +235,7 @@ for(fraq_ind in  1:f){
       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
+      p_vals_posi_fraq_fwer <- pmin(p_vals_posi_fraq_nofwer*model.size,1)
       p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
       
     }
@@ -275,71 +284,79 @@ for(fraq_ind in  1:f){
          p_vals_sat_fwer = p_vals_sat_fwer,
          p_vals_split_fwer = p_vals_split_fwer,
          p_vals_posi_fwer = p_vals_posi_fwer,
+         p_vals_posi_fraq_fwer = p_vals_posi_fraq_fwer,
          select.again.counter = select.again.counter,
          logs = logs)
     
   }
   toc()
   stopCluster(cl)
+  
   #Fetch p-values obtained from parallel computation
   results <- as.data.frame(results)
   p_vals_D_fwer <- results$p_vals_D_fwer
   p_vals_C_fwer <- results$p_vals_C_fwer
   p_vals_split_fwer <- results$p_vals_split_fwer
   p_vals_posi_fwer <- results$p_vals_posi_fwer
+  p_vals_posi_fraq_fwer <- results$p_vals_posi_fraq_fwer
   p_vals_sat_fwer <- results$p_vals_sat_fwer
   select.again.counter <- do.call(rbind,results$select.again.counter)
+  
   #Compute confusion matrices, power and type1 error from parallel computation and average over all of them
   conf_matrices_D <- lapply(p_vals_D_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_C <- lapply(p_vals_C_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_split <-lapply(p_vals_split_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_posi <-lapply(p_vals_posi_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrices_posi_fraq <-lapply(p_vals_posi_fraq_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_sat <-lapply(p_vals_sat_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrix_all_D <- do.call(rbind, conf_matrices_D)
   conf_matrix_all_C <- do.call(rbind, conf_matrices_C)
   conf_matrix_all_split <- do.call(rbind, conf_matrices_split)
   conf_matrix_all_posi <- do.call(rbind, conf_matrices_posi)
+  conf_matrix_all_posi_fraq <- do.call(rbind, conf_matrices_posi_fraq)
   conf_matrix_all_sat <- do.call(rbind, conf_matrices_sat)
+  
   #Averaging over metrics
   test_res_D_avg <- colMeans(conf_matrix_all_D)
   test_res_C_avg <- colMeans(conf_matrix_all_C)
   test_res_split_avg <- colMeans(conf_matrix_all_split)
   test_res_posi_avg <- colMeans(conf_matrix_all_posi)
+  test_res_posi_fraq_avg <- colMeans(conf_matrix_all_posi_fraq)
   test_res_sat_avg <- colMeans(conf_matrix_all_sat)
   power_avg_D <- test_res_D_avg[2]/(length(sel.index))
   power_avg_C <- test_res_C_avg[2]/(length(sel.index))
   power_avg_split <- test_res_split_avg[2]/(length(sel.index))
   power_avg_posi <- test_res_posi_avg[2]/(length(sel.index))
+  power_avg_posi_fraq <- test_res_posi_fraq_avg[2]/(length(sel.index))
   power_avg_sat <- test_res_sat_avg[2]/(length(sel.index))
   type1_error_avg_D <- test_res_D_avg[1]/(p-length(sel.index))
   type1_error_avg_C <- test_res_C_avg[1]/(p-length(sel.index))
   type1_error_avg_split <- test_res_split_avg[1]/(p-length(sel.index))
   type1_error_avg_posi <- test_res_posi_avg[1]/(p-length(sel.index))
+  type1_error_avg_posi_fraq <- test_res_posi_fraq_avg[1]/(p-length(sel.index))
   type1_error_avg_sat <- test_res_sat_avg[1]/(p-length(sel.index))
-  
   
   #Calculate FWER
   H0T_Rej_any_D <- lapply(p_vals_D_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_C <- lapply(p_vals_C_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_split <- lapply(p_vals_split_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_posi <- lapply(p_vals_posi_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  H0T_Rej_any_posi_fraq <- lapply(p_vals_posi_fraq_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_sat <- lapply(p_vals_sat_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   FWER_D <- sum(do.call(rbind,H0T_Rej_any_D))/nsim
   FWER_C <- sum(do.call(rbind,H0T_Rej_any_C))/nsim
   FWER_split <- sum(do.call(rbind,H0T_Rej_any_split))/nsim
   FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
+  FWER_posi_fraq <- sum(do.call(rbind,H0T_Rej_any_posi_fraq))/nsim
   FWER_sat <- sum(do.call(rbind,H0T_Rej_any_sat))/nsim
   
-  #Printing results of one fraction to console
+  #Printing results of one fraction to console for carving,combined carving and data splitting
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
   plot_conf_matrix(test_res_D_avg,"Combined Carving", nsim)
   plot_conf_matrix(test_res_C_avg,"Carving", nsim)
   cat("The average power of combined carving p-values:", power_avg_D, "\n")
   cat("The average power of carving p-values:", power_avg_C,"\n")
   cat("The average power of splitting p-values:", power_avg_split,"\n")
-  
-  #cat("The average type 1 error of combined carvings p-values:", type1_error_avg_D,"\n")
-  #cat("The average type 1 error of carvings p-values:", type1_error_avg_C,"\n")
   cat("The FWER of combined carvings p-values:", FWER_D,"\n")
   cat("The FWER of carvings p-values:", FWER_C,"\n")
   cat("The FWER of splitting p-values:", FWER_split,"\n")
@@ -349,21 +366,25 @@ for(fraq_ind in  1:f){
   full_test_res_C[fraq_ind, ] <- test_res_C_avg
   full_test_res_split[fraq_ind, ] <- test_res_split_avg
   full_test_res_posi[fraq_ind, ] <- test_res_posi_avg
+  full_test_res_posi_fraq[fraq_ind, ] <- test_res_posi_fraq_avg
   full_test_res_sat[fraq_ind, ] <- test_res_sat_avg
   full_power_avg_D[fraq_ind] <- power_avg_D
   full_power_avg_C[fraq_ind] <- power_avg_C
   full_power_avg_split[fraq_ind] <- power_avg_split
   full_power_avg_posi[fraq_ind] <- power_avg_posi
+  full_power_avg_posi_fraq[fraq_ind] <- power_avg_posi_fraq
   full_power_avg_sat[fraq_ind] <- power_avg_sat
   full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
   full_type1_error_avg_split[fraq_ind] <- type1_error_avg_split
   full_type1_error_avg_posi[fraq_ind] <- type1_error_avg_posi
+  full_type1_error_avg_posi_fraq[fraq_ind] <- type1_error_avg_posi_fraq
   full_type1_error_avg_sat[fraq_ind] <- type1_error_avg_sat
   full_FWER_D[fraq_ind] <- FWER_D
   full_FWER_C[fraq_ind] <- FWER_C
   full_FWER_split[fraq_ind] <- FWER_split
   full_FWER_posi[fraq_ind] <- FWER_posi
+  full_FWER_posi_fraq[fraq_ind] <- FWER_posi_fraq
   full_FWER_sat[fraq_ind] <- FWER_sat
   repeated_selections[fraq_ind] <- sum(select.again.counter)
   log.vec[[fraq_ind]] <- unlist(results$logs)
@@ -382,10 +403,10 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 #Save or load existing simulation environments
-#save.image(file='Environment_s=5_SNR=1,5.RData')
-#load('myEnvironment.RData')
+save.image(file='Environment_s=15_SNR=1,5.RData')
+#load("simulation_environments/Environment_s=5_SNR=1,5.RData")
 
-# --------------- Create plots --------------
+# ----------------- Create main power plots -----------------
 
 #Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
@@ -422,7 +443,6 @@ FWER_points_adjusted <- FWER_points_long %>%
   ungroup()
 
 
-
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
   geom_line(na.rm = TRUE) +
   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
@@ -436,11 +456,55 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
 print(PowerPlot)
-# ggsave("main_plot_s=5_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
-#        units = "in", dpi = 300, bg = "#F0F0F0")
+ggsave("main_plot_s=15_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
+       units = "in", dpi = 300, bg = "#F0F0F0")
 
 
 
+# -------- Create plots for visualization of power composition in combined carving estimator ---------
+
+#Need those NA's to integrate posi at fraction 1
+# data_Power2 <- data.frame(
+#   Fraq = fraq.vec,
+#   "Combined Carving" = full_power_avg_D,
+#   "Data Splitting" = full_power_avg_split,
+#   "PoSI" = full_power_avg_posi_fraq
+#   )
+# 
+# FWER_points2 <- data.frame(
+#   Fraq = fraq.vec,
+#   "Combined Carving" = full_FWER_D,
+#   "Data Splitting" = full_FWER_split,
+#   "PoSI" = full_FWER_posi_fraq
+# )
+# 
+# # Convert data frames to long format
+# data_Power2_long <- tidyr::gather(data_Power2, "Type", "Value", -Fraq)
+# FWER_points2_long <- tidyr::gather(FWER_points2, "Type", "Value", -Fraq)
+# 
+# # Adjust fractions for points that overlap
+# FWER_points_adjusted2 <- FWER_points2_long %>%
+#   group_by(Fraq, Value) %>%
+#   mutate(
+#     adjust_right = ifelse(duplicated(Value), 0.001, 0),
+#     adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
+#     adjust_total = adjust_right + adjust_left,
+#     Fraq_adjusted = Fraq + adjust_total
+#   ) %>%
+#   ungroup()
+# 
+# PowerPlot2 <- ggplot(data_Power2_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
+#   geom_line() +
+#   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
+#   geom_point(data = FWER_points_adjusted2, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3) +
+#   labs(title = "Average Power (-) and FWER (o)",
+#        x = "Fractions used for selection", y = "Value") +
+#   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+#   scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+#   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+#   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
+# 
+# print(PowerPlot2)
 
 
 

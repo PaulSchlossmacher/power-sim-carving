@@ -1,5 +1,5 @@
 
-#' SNTN cumulative distribution function, following Lemma 3.1 from Drysdales paper
+#' SNTN cumulative distribution function, following Lemma 2.4.1
 #'
 #' @param z (vector): values at which the sntn_cdf is evaluated
 #' @param mu1 (vector): means of the normal cdf for each entry of z
@@ -14,10 +14,9 @@
 #' @return P(x<z) under the sntn cdf P
 
 SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
-  #Note: the input variances are already squared
+  
   if (!all(a<b)){
     warning("We encountered ", toString(sum(!(a<b))), "/", toString(length(z)), " entries of vlo that are larger than vup")
-   
   }
   s <- length(z)
   theta1 <- c1 * mu1 + c2 * mu2
@@ -36,8 +35,6 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   delta <- (b-theta2)/r.sigma2
   m1_z <- (z-theta1)/r.sigma1
   
-  #This is the covariance matrix for the bivariate normal dist used by Drysdale
-  #https://github.com/ErikinBC/sntn/blob/main/sntn/_cdf_bvn/_utils.py
   sntn_cdf_arr <- rep(0,s)
   for (i in 1:s){
     #Standard bivariate normal with correlation rho:
@@ -71,7 +68,7 @@ SNTN_CDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   return(sntn_cdf_arr)
 }
 
-#Also from Lemma 3.1 in Drysdales paper
+#This is from Lemma 3.1 in Drysdales paper
 SNTN_PDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   s <- length(z)
   theta1 <- c1 * mu1 + c2 * mu2
@@ -100,44 +97,3 @@ SNTN_PDF <- function(z,mu1, tau1, mu2, tau2, a, b, c1, c2) {
   }
   return(sntn_pdf_arr)
 }
-
-
-
-## ----------- Testing of our cdf -----------------
-
-# #What result does the cdf give for very "average" inputs?
-# #We'd hope for sth like 1/2 here.
-# SNTN_CDF(z=0,
-#          mu1=0,
-#          tau1=1,
-#          mu2=0,
-#          tau2=1,
-#          a=-5,
-#          b=5,
-#          c1=1/10,
-#          c2=9/10)
-# 
-# #This does indeed yield 1/2, which is promising.
-# 
-# 
-# SNTN_CDF(z=1,
-#          mu1=0,
-#          tau1=1,
-#          mu2=0,
-#          tau2=1,
-#          a=-5,
-#          b=5,
-#          c1=1/10,
-#          c2=9/10)
-# #For z=1 we get 0.865, which intuitively seems quite high, but not completely unreasonable
-# 
-# SNTN_CDF(z=-1,
-#          mu1=0,
-#          tau1=1,
-#          mu2=0,
-#          tau2=1,
-#          a=-5,
-#          b=5,
-#          c1=1/10,
-#          c2=9/10)
-# #For z=1 we get 0.134, which pairs nicely with the result for z=1, seems like symmetry around 0 is fulfilled.

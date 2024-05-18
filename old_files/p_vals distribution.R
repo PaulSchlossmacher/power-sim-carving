@@ -139,19 +139,6 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
  }
 cat("We had ", sum(screening), " successful screenings out of ", rounds, " simulations.")
 
-# par(mfrow = c(1, 2))
-# #Create empty plot to visualize 1dim distribution of p-values
-# plot(x = NULL, y = NULL, xlim = c(0, 1), ylim = c(0, 1), 
-#      main = "p-values under screening", xlab = "Values", ylab = "")
-# 
-# # Add points to the plot at a fixed y-coordinate
-# points(p_vals_screen, rep(0.5, length(p_vals_screen)), pch = 16, col = "skyblue", cex = 0.7)
-# 
-# plot(x = NULL, y = NULL, xlim = c(0, 1), ylim = c(0, 1), 
-#      main = "p-values without screening", xlab = "Values", ylab = "")
-# 
-# # Add points to the plot at a fixed y-coordinate
-# points(p_vals_noscreen, rep(0.5, length(p_vals_noscreen)), pch = 16, col = "skyblue", cex = 0.7)
 
 print(length(p_vals_screen))
 print(length(p_vals_noscreen))

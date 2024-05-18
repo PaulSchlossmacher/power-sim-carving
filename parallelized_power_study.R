@@ -406,7 +406,9 @@ print(rep_select_df)
 save.image(file='Environment_s=15_SNR=1,5.RData')
 #load("simulation_environments/Environment_s=5_SNR=1,5.RData")
 
-# ----------------- Create main power plots -----------------
+
+# --------------- Create main power plots --------------
+
 
 #Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
@@ -460,6 +462,7 @@ ggsave("main_plot_s=15_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
+# --------------- Create plots for visualization of power composition in combined carving estimator --------------
 
 # -------- Create plots for visualization of power composition in combined carving estimator ---------
 

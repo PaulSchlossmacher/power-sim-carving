@@ -41,7 +41,7 @@ source(carve_linear_path)
 
 
 
-#-------------------- Toeplitz Carving simulation from Christoph ----------------------
+#-------------------- Toeplitz Carving simulation from Multicarving paper ----------------------
 # n <- 100
 # p <- 200
 # rho <- 0.6

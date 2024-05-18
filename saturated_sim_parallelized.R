@@ -230,11 +230,13 @@ for(fraq_ind in  1:f){
            
            #Add FWER control with Bonferroni correction
            model.size <- length(chosen)
-           p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+
            p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+           p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
+           p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
            p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
            p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size,1)
-           p_vals_sat_fwer <- pmin(p_vals_sat_nofwer*model.size,1)
+
            
          }
          

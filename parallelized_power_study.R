@@ -1,20 +1,18 @@
-#This simulation compares the powers of the carving estimators from Christoph and Drysdale. It also includes
-#the regular data splitting estimator for reference. All p-values are computed in a parallelized framework.
 # Clear all variables
 rm(list = ls())
 
 
-#Local, user specific path, that should work for both of us:
+#Local & user specific path
 Local_path<-getwd()
-hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
+hdi_adjustments_path<-paste(Local_path, "/multicarving_paper/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/multicarving_paper/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/multicarving_paper/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/multicarving_paper/inference/tryCatch-W-E.R", sep="")
 
-#Different paths here, because they're "our own" functions
+#Different paths here, because they're in a different directory
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
 split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
-carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+carve_combined_path<-paste(Local_path, "/carve_combined.R", sep="")
 
 
 library(MASS)
@@ -29,10 +27,8 @@ library(parallel)
 library(doParallel)
 library(doRNG)
 library(truncnorm)
-library(git2r)
 library(ggplot2)
 library(dplyr)
-
 
 source(hdi_adjustments_path)
 source(carving_path)
@@ -40,18 +36,18 @@ source(sample_from_truncated_path)
 source(tryCatchWE_path)
 source(SNTN_distribution_path)
 source(split_select_function_path)
-source(carve_linear_path)
+source(carve_combined_path)
 
 
 
-#-------------------- Toeplitz Carving simulation from Christoph ----------------------
+#-------------------- Toeplitz simulation from Multicarving paper ----------------------
 n <- 100
 p <- 200
 rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
-#fraq.vec <- c(0.9)
-fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+fraq.vec <- c(0.5, 0.9)
+#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -67,7 +63,7 @@ y.true <- x %*% beta
 SNR = 1.5
 sigma_squ = drop(var(y.true)) / SNR
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 300
+nsim <- 3
 sig.level <- 0.05
 flexible_selection  <- FALSE #should we allow more selections for data splitting approach
 flexible_selection_count <- 50
@@ -138,7 +134,7 @@ full_FWER_posi <- rep(0,f)
 full_FWER_sat <- rep(0,f)
 
 log.vec <- vector("list",length(fraq.vec))
-#Should count number of repeated selection events to make Drysdale's estimator work over nsim rounds and a given fraction
+#Should count number of repeated selection events to make combined carving estimator work over nsim rounds and a given fraction
 repeated_selections <- rep(0,f)
 RNGkind("L'Ecuyer-CMRG")
 set.seed(42)
@@ -167,7 +163,7 @@ for(fraq_ind in  1:f){
     select.again.counter = 0
     while(select.again){
       if (select.again.counter > flexible_selection_count){
-        warning("Tried to many selection events and not one of them was conformable for beta_Drysdale and beta_split")
+        warning("Tried to many selection events and not one of them was conformable for beta_comb and beta_split")
         flexible_selection <- FALSE
       }
       select.again <- FALSE
@@ -177,13 +173,11 @@ for(fraq_ind in  1:f){
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
-        #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
         empty_model <- TRUE
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
         p_vals_sat_fwer <- rep(1,p)
-        #print("0 variables where chosen by the lasso, but thats not a problem.")
         logs <- c(logs,"0 variables where chosen by the lasso, but thats not a problem.")
       }
       lambda <- split.select.list$lambda
@@ -198,7 +192,7 @@ for(fraq_ind in  1:f){
         p_vals_D_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
         splitting_estimator_failed <- TRUE
-        logs <- c(logs,"Set splitting and carve_linear p_vals to 1, because we selected more variables than beta_D & beta_split can handle")
+        logs <- c(logs,"Set splitting and carve.comb p_vals to 1, because we selected more variables than beta_D & beta_split can handle")
         
       }
     }
@@ -206,8 +200,8 @@ for(fraq_ind in  1:f){
     
     
     if(!empty_model && !splitting_estimator_failed){
-      #Compute pure p-values from Drysdale's, Christoph's and regular splitting approach
-      carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+      #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
+      carve_D <-carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
       
       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
@@ -338,16 +332,16 @@ for(fraq_ind in  1:f){
   
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
-  plot_conf_matrix(test_res_D_avg,"Drysdale's", nsim)
-  plot_conf_matrix(test_res_C_avg,"Christoph's", nsim)
-  cat("The average power of Drysdales p-values:", power_avg_D, "\n")
-  cat("The average power of Christophs p-values:", power_avg_C,"\n")
+  plot_conf_matrix(test_res_D_avg,"Combined Carving", nsim)
+  plot_conf_matrix(test_res_C_avg,"Carving", nsim)
+  cat("The average power of combined carving p-values:", power_avg_D, "\n")
+  cat("The average power of carving p-values:", power_avg_C,"\n")
   cat("The average power of splitting p-values:", power_avg_split,"\n")
   
-  #cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
-  #cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
-  cat("The FWER of Drysdales p-values:", FWER_D,"\n")
-  cat("The FWER of Christophs p-values:", FWER_C,"\n")
+  #cat("The average type 1 error of combined carvings p-values:", type1_error_avg_D,"\n")
+  #cat("The average type 1 error of carvings p-values:", type1_error_avg_C,"\n")
+  cat("The FWER of combined carvings p-values:", FWER_D,"\n")
+  cat("The FWER of carvings p-values:", FWER_C,"\n")
   cat("The FWER of splitting p-values:", FWER_split,"\n")
 
   #Store everything to create plots later

@@ -1,20 +1,18 @@
-#Trying to create a more extreme Toeplitz example with less noise to 
-#encourage Lasso to use more variables:
 # Clear all variables
 rm(list = ls())
 
 
-#Local, user specific path, that should work for both of us:
+#Local & user specific path
 Local_path<-getwd()
-hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
+hdi_adjustments_path<-paste(Local_path, "/multicarving_paper/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/multicarving_paper/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/multicarving_paper/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/multicarving_paper/inference/tryCatch-W-E.R", sep="")
 
-#Different paths here, because they're "our own" functions
+#Different paths here, because they're in a different directory
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
 split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
-carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+carve_combined_path<-paste(Local_path, "/carve_combined.R", sep="")
 
 
 library(MASS)
@@ -29,7 +27,6 @@ library(parallel)
 library(doParallel)
 library(doRNG)
 library(truncnorm)
-library(git2r)
 library(ggplot2)
 
 
@@ -39,11 +36,12 @@ source(sample_from_truncated_path)
 source(tryCatchWE_path)
 source(SNTN_distribution_path)
 source(split_select_function_path)
-source(carve_linear_path)
+source(carve_combined_path)
 
 
 
-#-------------------- Toeplitz Carving simulation from Christoph ----------------------
+
+#-------------------- Toeplitz simulation from Multicarving paper ----------------------
 n <- 100
 p <- 200
 rho <- 0.6
@@ -63,7 +61,7 @@ x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 SNR <- 1.713766 # value created for Toeplitz 0.6
 sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 20
+nsim <- 3
 sig.level <- 0.05
 
 total.time <- 0
@@ -164,7 +162,6 @@ for(fraq_ind in  1:f){
       split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
       beta_tmp <- split.select.list$beta
       if(sum(beta_tmp!=0)==0){
-        #Christoph sets his p-values just all to 1 if the model is empty, ask if thats okey
         empty_model <- TRUE
         p_vals_D_fwer <- rep(1,p)
         p_vals_C_fwer <- rep(1,p)
@@ -182,8 +179,8 @@ for(fraq_ind in  1:f){
     }
     
     if(!empty_model){
-      #Compute pure p-values from Drysdale's and Christoph's approach
-      carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+      #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
+      carve_D <-carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
       
       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
@@ -254,16 +251,16 @@ for(fraq_ind in  1:f){
   FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
-  plot_conf_matrix(test_res_D_avg,"Drysdale's", nsim)
-  plot_conf_matrix(test_res_C_avg,"Christoph's", nsim)
-  cat("The average power of Drysdales p-values:", power_avg_D, "\n")
-  cat("The average power of Christophs p-values:", power_avg_C,"\n")
+  plot_conf_matrix(test_res_D_avg,"Combined Carving", nsim)
+  plot_conf_matrix(test_res_C_avg,"Carving", nsim)
+  cat("The average power of combined carving p-values:", power_avg_D, "\n")
+  cat("The average power of carving p-values:", power_avg_C,"\n")
   cat("The average power of splitting p-values:", power_avg_split,"\n")
   cat("The average power of posi p-values:", power_avg_posi,"\n")
-  #cat("The average type 1 error of Drysdales p-values:", type1_error_avg_D,"\n")
-  #cat("The average type 1 error of Christophs p-values:", type1_error_avg_C,"\n")
-  cat("The FWER of Drysdales p-values:", FWER_D,"\n")
-  cat("The FWER of Christophs p-values:", FWER_C,"\n")
+  #cat("The average type 1 error of combined carvings p-values:", type1_error_avg_D,"\n")
+  #cat("The average type 1 error of carvings p-values:", type1_error_avg_C,"\n")
+  cat("The FWER of combined carvings p-values:", FWER_D,"\n")
+  cat("The FWER of carvings p-values:", FWER_C,"\n")
   cat("The FWER of splitting p-values:", FWER_split,"\n")
   cat("The FWER of posi p-values:", FWER_posi,"\n")
   #Store everything to create plots later

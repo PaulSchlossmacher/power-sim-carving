@@ -385,7 +385,7 @@ print(rep_select_df)
 #save.image(file='Environment_s=5_SNR=1,5.RData')
 #load('myEnvironment.RData')
 
-# --------------- Create plots --------------
+# --------------- Create main power plots --------------
 
 #Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
@@ -422,7 +422,6 @@ FWER_points_adjusted <- FWER_points_long %>%
   ungroup()
 
 
-
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
   geom_line(na.rm = TRUE) +
   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
@@ -440,6 +439,7 @@ print(PowerPlot)
 #        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
+# --------------- Create plots for visualization of power composition in combined carving estimator --------------
 
 
 

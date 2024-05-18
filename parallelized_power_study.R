@@ -49,9 +49,9 @@ n <- 100
 p <- 200
 rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
-fraq.vec <- c(0.7,0.8,0.9,0.95)
+#fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -59,15 +59,19 @@ sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 sparsity <- 5
+RNGkind("Mersenne-Twister")
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma_squ <- 2 # true variance
-nsim <- 20
+SNR = 5
+#SNR = 1.5
+sigma_squ = drop(var(y.true)) / SNR
+#sigma_squ <- 2 #variance used in some other simulations without fixing SNR
+nsim <- 300
 sig.level <- 0.05
 flexible_selection  <- FALSE #should we allow more selections for data splitting approach
 flexible_selection_count <- 50
+
 
 total.time <- 0
 start.time <- Sys.time()
@@ -333,6 +337,10 @@ for(fraq_ind in  1:f){
   repeated_selections[fraq_ind] <- sum(select.again.counter)
   log.vec[[fraq_ind]] <- unlist(results$logs)
 }
+# Compute average results from PoSI estimator across all fractions, as it always worked with fraction 1
+avg_power_posi <- mean(full_power_avg_posi)
+avg_type1_error_posi <- mean(full_type1_error_avg_posi)
+avg_fwer_posi <- mean(full_FWER_posi)
 
 end.time <- Sys.time()
 total.time <- end.time - start.time
@@ -343,29 +351,42 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 
-#save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
+#save.image(file='myEnvironment_nsim200_5active_sigma2_non_flexible2.RData')
 #load('myEnvironment.RData')
 # --------------- Create plots --------------
 
+#Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Power Christoph" = full_power_avg_C,
-  "Avg Power Drysdale" = full_power_avg_D,
-  "Avg Power Splitting" = full_power_avg_split
+  Fraq = c(fraq.vec, 1),
+  "Avg Power Carving" = c(full_power_avg_C, NA),
+  "Avg Power Combined Carving" = c(full_power_avg_D, NA),
+  "Avg Power Data Splitting" = c(full_power_avg_split, NA),
+  "Avg Power PoSI" = c(rep(NA, length(fraq.vec)), avg_power_posi)
 )
 
 FWER_points <- data.frame(
-  Fraq = fraq.vec,
-  "FWER Christoph" = full_FWER_C,
-  "FWER Drysdale" = full_FWER_D,
-  "FWER Splitting" = full_FWER_split
+  Fraq = c(fraq.vec, 1),
+  "FWER Carving" = c(full_FWER_C, NA),
+  "FWER Combined Carving" = c(full_FWER_D, NA),
+  "FWER Data Splitting" = c(full_FWER_split, NA),
+  "FWER PoSI" = c(rep(NA, length(fraq.vec)), avg_fwer_posi)
 )
 
+data_TypeI <- data.frame(
+  Fraq = c(fraq.vec, 1),
+  "Avg Type I Error rate Carving" = c(full_type1_error_avg_C, NA),
+  "Avg Type I Error rate Combined Carving" = c(full_type1_error_avg_D, NA),
+  "Avg Type I Error rate Data Splitting" = c(full_type1_error_avg_split, NA),
+  "Avg Type I Error rate PoSI" = c(rep(NA, length(fraq.vec)), avg_type1_error_posi)
+)
+
+# Convert data frames to long format
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
-#Adjust fractions by a little at the points that overlap
+data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+
+# Adjust fractions for points that overlap
 FWER_points_adjusted <- FWER_points_long %>%
-  arrange(Type, Fraq, Value) %>%
   group_by(Fraq, Value) %>%
   mutate(
     adjust_right = ifelse(duplicated(Value), 0.001, 0),
@@ -376,37 +397,25 @@ FWER_points_adjusted <- FWER_points_long %>%
   ungroup()
 
 
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+
+PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
   geom_line() +
   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = data_Power_long$Type), size = 3) +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = data_Power_long$Type, shape = data_Power_long$Type), size = 3) +
   labs(title = "Average Power and FWER",
        x = "Fractions used for selection", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2))
+  theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+  guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
-ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+print(PowerPlot)
+ggsave("PowerPlot_chatgpt.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
-data_TypeI <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
-  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D,
-  "Avg Type I Error rate Splitting" = full_type1_error_avg_split
-)
 
 
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
-
-
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-  labs(title = "Average Type I Error Rate",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
 
 

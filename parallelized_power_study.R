@@ -48,9 +48,10 @@ source(carve_linear_path)
 n <- 100
 p <- 200
 rho <- 0.6
-fraq.vec <- c(0.5,0.6,0.7,0.8,0.9)
+#fraq.vec <- c(0.5,0.6,0.7)
+#fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -58,13 +59,19 @@ sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 sparsity <- 5
+RNGkind("Mersenne-Twister")
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma_squ <- 2 # true variance
-nsim <- 50
+SNR = 5
+#SNR = 1.5
+sigma_squ = drop(var(y.true)) / SNR
+#sigma_squ <- 2 #variance used in some other simulations without fixing SNR
+nsim <- 300
 sig.level <- 0.05
+flexible_selection  <- FALSE #should we allow more selections for data splitting approach
+flexible_selection_count <- 50
+
 
 total.time <- 0
 start.time <- Sys.time()
@@ -112,15 +119,20 @@ f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
 full_test_res_split <- matrix(rep(0,4*f), nrow = f)
+full_test_res_posi <- matrix(rep(0,4*f), nrow = f)
 full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_power_avg_split <- rep(0,f)
+full_power_avg_posi <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
 full_type1_error_avg_split <- rep(0,f)
+full_type1_error_avg_posi <- rep(0,f)
 full_FWER_D <- rep(0,f)
 full_FWER_C <- rep(0,f)
 full_FWER_split <- rep(0,f)
+full_FWER_posi <- rep(0,f)
+
 log.vec <- vector("list",length(fraq.vec))
 #Should count number of repeated selection events to make Drysdale's estimator work over nsim rounds and a given fraction
 repeated_selections <- rep(0,f)
@@ -147,10 +159,12 @@ for(fraq_ind in  1:f){
     logs <- c()
     select.again <- TRUE
     empty_model <- FALSE
+    splitting_estimator_failed <- FALSE
     select.again.counter = 0
     while(select.again){
-      if (select.again.counter > 200){
-        stop("Tried to many selection events and not one of them was conformable for beta_Drysdale and beta_split")
+      if (select.again.counter > flexible_selection_count){
+        warning("Tried to many selection events and not one of them was conformable for beta_Drysdale and beta_split")
+        flexible_selection <- FALSE
       }
       select.again <- FALSE
       y <- y.true + sqrt(sigma_squ) * rnorm(n)
@@ -169,15 +183,24 @@ for(fraq_ind in  1:f){
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
-      if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind]))){
+      if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && flexible_selection){
         select.again <- TRUE
         select.again.counter <- select.again.counter + 1
         #print("Need to split again because we selected more variables than beta_D & beta_split can handle")
         logs <- c(logs,"Need to split again because we selected more variables than beta_D & beta_split can handle")
       }
+      else if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && !flexible_selection){
+        p_vals_D_fwer <- rep(1,p)
+        p_vals_split_fwer <- rep(1,p)
+        splitting_estimator_failed <- TRUE
+        logs <- c(logs,"Set splitting and carve_linear p_vals to 1, because we selected more variables than beta_D & beta_split can handle")
+        
+      }
     }
     
-    if(!empty_model){
+    
+    
+    if(!empty_model && !splitting_estimator_failed){
       #Compute pure p-values from Drysdale's, Christoph's and regular splitting approach
       carve_D <-carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
@@ -187,7 +210,7 @@ for(fraq_ind in  1:f){
       p_vals_C_nofwer<-carve_C$pv
       
       p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
-      
+
       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
       p_vals_comp_C<-rep(1,p)
       chosen <- which(abs(beta_tmp)>0)
@@ -199,10 +222,40 @@ for(fraq_ind in  1:f){
       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
     }
+    else if(!empty_model){
+      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+                             lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+      p_vals_C_nofwer<-carve_C$pv
+
+      p_vals_comp_C<-rep(1,p)
+      chosen <- which(abs(beta_tmp)>0)
+      p_vals_comp_C[chosen] <- p_vals_C_nofwer
+      #Add FWER control with Bonferroni correction
+      model.size <- length(chosen)
+      p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+    }
+    
+    #new selection event on all of the data for posi
+    split.select.list.posi <- split.select(x,y,fraction = 1)
+    beta_tmp_posi <- split.select.list.posi$beta
+    lambda.posi <- split.select.list.posi$lambda
+    split.posi <- split.select.list.posi$split
+    chosen.posi <- which(abs(beta_tmp_posi)>0)
+    model.size.posi <- length(chosen.posi)
+    #handle empty model
+    if(sum(beta_tmp_posi!=0)==0){
+      p_vals_posi_fwer <- rep(1,p)
+    }
+    else{
+      p_vals_posi_nofwer = beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma=sigma_squ)$pvals
+      p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size.posi,1)
+      
+    }
     
     list(p_vals_D_fwer = p_vals_D_fwer, 
          p_vals_C_fwer = p_vals_C_fwer,
          p_vals_split_fwer = p_vals_split_fwer,
+         p_vals_posi_fwer = p_vals_posi_fwer,
          select.again.counter = select.again.counter,
          logs = logs)
     
@@ -214,32 +267,41 @@ for(fraq_ind in  1:f){
   p_vals_D_fwer <- results$p_vals_D_fwer
   p_vals_C_fwer <- results$p_vals_C_fwer
   p_vals_split_fwer <- results$p_vals_split_fwer
+  p_vals_posi_fwer <- results$p_vals_posi_fwer
   select.again.counter <- do.call(rbind,results$select.again.counter)
   #Compute confusion matrices, power and type1 error from parallel computation and average over all of them
   conf_matrices_D <- lapply(p_vals_D_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_C <- lapply(p_vals_C_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_split <-lapply(p_vals_split_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrices_posi <-lapply(p_vals_posi_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrix_all_D <- do.call(rbind, conf_matrices_D)
   conf_matrix_all_C <- do.call(rbind, conf_matrices_C)
   conf_matrix_all_split <- do.call(rbind, conf_matrices_split)
+  conf_matrix_all_posi <- do.call(rbind, conf_matrices_posi)
   #Averaging over metrics
   test_res_D_avg <- colMeans(conf_matrix_all_D)
   test_res_C_avg <- colMeans(conf_matrix_all_C)
   test_res_split_avg <- colMeans(conf_matrix_all_split)
+  test_res_posi_avg <- colMeans(conf_matrix_all_posi)
   power_avg_D <- test_res_D_avg[2]/(length(sel.index))
   power_avg_C <- test_res_C_avg[2]/(length(sel.index))
   power_avg_split <- test_res_split_avg[2]/(length(sel.index))
+  power_avg_posi <- test_res_posi_avg[2]/(length(sel.index))
   type1_error_avg_D <- test_res_D_avg[1]/(p-length(sel.index))
   type1_error_avg_C <- test_res_C_avg[1]/(p-length(sel.index))
   type1_error_avg_split <- test_res_split_avg[1]/(p-length(sel.index))
+  type1_error_avg_posi <- test_res_posi_avg[1]/(p-length(sel.index))
+  
   
   #Calculate FWER
   H0T_Rej_any_D <- lapply(p_vals_D_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_C <- lapply(p_vals_C_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_split <- lapply(p_vals_split_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  H0T_Rej_any_posi <- lapply(p_vals_posi_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   FWER_D <- sum(do.call(rbind,H0T_Rej_any_D))/nsim
   FWER_C <- sum(do.call(rbind,H0T_Rej_any_C))/nsim
   FWER_split <- sum(do.call(rbind,H0T_Rej_any_split))/nsim
+  FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
   
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
@@ -259,18 +321,26 @@ for(fraq_ind in  1:f){
   full_test_res_D[fraq_ind, ] <- test_res_D_avg
   full_test_res_C[fraq_ind, ] <- test_res_C_avg
   full_test_res_split[fraq_ind, ] <- test_res_split_avg
+  full_test_res_posi[fraq_ind, ] <- test_res_posi_avg
   full_power_avg_D[fraq_ind] <- power_avg_D
   full_power_avg_C[fraq_ind] <- power_avg_C
   full_power_avg_split[fraq_ind] <- power_avg_split
+  full_power_avg_posi[fraq_ind] <- power_avg_posi
   full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
   full_type1_error_avg_split[fraq_ind] <- type1_error_avg_split
+  full_type1_error_avg_posi[fraq_ind] <- type1_error_avg_posi
   full_FWER_D[fraq_ind] <- FWER_D
   full_FWER_C[fraq_ind] <- FWER_C
   full_FWER_split[fraq_ind] <- FWER_split
+  full_FWER_posi[fraq_ind] <- FWER_posi
   repeated_selections[fraq_ind] <- sum(select.again.counter)
   log.vec[[fraq_ind]] <- unlist(results$logs)
 }
+# Compute average results from PoSI estimator across all fractions, as it always worked with fraction 1
+avg_power_posi <- mean(full_power_avg_posi)
+avg_type1_error_posi <- mean(full_type1_error_avg_posi)
+avg_fwer_posi <- mean(full_FWER_posi)
 
 end.time <- Sys.time()
 total.time <- end.time - start.time
@@ -281,29 +351,42 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 
-#save.image(file='myEnvironment_nsim200_5active_sigma2.RData')
+#save.image(file='myEnvironment_nsim200_5active_sigma2_non_flexible2.RData')
 #load('myEnvironment.RData')
 # --------------- Create plots --------------
 
+#Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Power Christoph" = full_power_avg_C,
-  "Avg Power Drysdale" = full_power_avg_D,
-  "Avg Power Splitting" = full_power_avg_split
+  Fraq = c(fraq.vec, 1),
+  "Avg Power Carving" = c(full_power_avg_C, NA),
+  "Avg Power Combined Carving" = c(full_power_avg_D, NA),
+  "Avg Power Data Splitting" = c(full_power_avg_split, NA),
+  "Avg Power PoSI" = c(rep(NA, length(fraq.vec)), avg_power_posi)
 )
 
 FWER_points <- data.frame(
-  Fraq = fraq.vec,
-  "FWER Christoph" = full_FWER_C,
-  "FWER Drysdale" = full_FWER_D,
-  "FWER Splitting" = full_FWER_split
+  Fraq = c(fraq.vec, 1),
+  "FWER Carving" = c(full_FWER_C, NA),
+  "FWER Combined Carving" = c(full_FWER_D, NA),
+  "FWER Data Splitting" = c(full_FWER_split, NA),
+  "FWER PoSI" = c(rep(NA, length(fraq.vec)), avg_fwer_posi)
 )
 
+data_TypeI <- data.frame(
+  Fraq = c(fraq.vec, 1),
+  "Avg Type I Error rate Carving" = c(full_type1_error_avg_C, NA),
+  "Avg Type I Error rate Combined Carving" = c(full_type1_error_avg_D, NA),
+  "Avg Type I Error rate Data Splitting" = c(full_type1_error_avg_split, NA),
+  "Avg Type I Error rate PoSI" = c(rep(NA, length(fraq.vec)), avg_type1_error_posi)
+)
+
+# Convert data frames to long format
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
-#Adjust fractions by a little at the points that overlap
+data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
+
+# Adjust fractions for points that overlap
 FWER_points_adjusted <- FWER_points_long %>%
-  arrange(Type, Fraq, Value) %>%
   group_by(Fraq, Value) %>%
   mutate(
     adjust_right = ifelse(duplicated(Value), 0.001, 0),
@@ -314,37 +397,25 @@ FWER_points_adjusted <- FWER_points_long %>%
   ungroup()
 
 
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
+
+PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
   geom_line() +
   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = data_Power_long$Type), size = 3) +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = data_Power_long$Type, shape = data_Power_long$Type), size = 3) +
   labs(title = "Average Power and FWER",
        x = "Fractions used for selection", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5)) +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2))
+  theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+  guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
-ggsave("PowerPlot.png", plot = PowerPlot, width = 8, height = 6,
+print(PowerPlot)
+ggsave("PowerPlot_chatgpt.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
-data_TypeI <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Type I Error rate Christoph" = full_type1_error_avg_C,
-  "Avg Type I Error rate Drysdale" = full_type1_error_avg_D,
-  "Avg Type I Error rate Splitting" = full_type1_error_avg_split
-)
 
 
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
-
-
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-  labs(title = "Average Type I Error Rate",
-       x = "Fraq", y = "Value") +
-  theme_minimal() +  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("TypeIPlot.png", plot = TypeIPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
 
 

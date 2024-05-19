@@ -19,7 +19,7 @@ carve.comb <- function(x, y, split, beta, lambda,sigma_squ){
   n.b <- n-n.a
   x.a <- x[split, ]
   y.a <- y[split, ]
-  x.b <- x[-split, ]
+  x.b <- matrix(x[-split, ], nrow = n.b)#matrix for the edge case when n.b = 1
   y.b <- y[-split, ]
 
   #Sigma gets chosen in accordance with the distribution of y_A in Lemma 2.4.1
@@ -149,7 +149,7 @@ beta.split <- function(x, y, split, beta, sigma_squ){
   p <- length(beta)
   n.a <- length(split)
   n.b <- n-n.a
-  x.b <- x[-split, ]
+  x.b <- matrix(x[-split, ], nrow = n.b)
   y.b <- y[-split, ]
 
   chosen <-  which(abs(beta) > 0) # selected variables

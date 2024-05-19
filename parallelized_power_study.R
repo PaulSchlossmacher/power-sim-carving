@@ -59,7 +59,7 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 #SNR = 4
-SNR = 1.5
+SNR = 2
 sigma_squ = drop(var(y.true)) / SNR
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
 nsim <- 300
@@ -202,7 +202,6 @@ for(fraq_ind in  1:f){
         
       }
     }
-    
     
     
     if(!empty_model && !splitting_estimator_failed){

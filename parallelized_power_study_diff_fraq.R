@@ -28,6 +28,7 @@ library(doParallel)
 library(doRNG)
 library(truncnorm)
 library(ggplot2)
+library(dplyr)
 
 
 source(hdi_adjustments_path)
@@ -364,66 +365,65 @@ avg_power_posi <- mean(full_power_avg_posi)
 avg_type1_error_posi <- mean(full_type1_error_avg_posi)
 avg_fwer_posi <- mean(full_FWER_posi)
 
-
 end.time <- Sys.time()
 total.time <- end.time - start.time
 cat("Total time needed for simulation:")
 print(total.time)
 
-#save.image(file='myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
+save.image(file='Environment_diff_fraqs_s=15_SNR=1,5.RData')
 #load('myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
 # --------------- Create plots --------------
 
+#Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Power Carving" = full_power_avg_C,
-  "Avg Power Combined Carving" = full_power_avg_D,
-  "Avg Power Splitting" = full_power_avg_split,
-  "Avg Power Posi" = full_power_avg_posi
+  Fraq = c(fraq.vec, 1),
+  "Carving" = c(full_power_avg_C, NA),
+  "Combined Carving" = c(full_power_avg_D, NA),
+  "Data Splitting" = c(full_power_avg_split, NA),
+  "PoSI Fraq" = c(full_power_avg_posi_fraq, NA),
+  "PoSI" = c(rep(NA, length(fraq.vec)), avg_power_posi)
 )
 
-labels_fraqs_D<-c(rep("",f), rep(round(avg_fraq.vec.comb,3), 3))
+FWER_points <- data.frame(
+  Fraq = c(fraq.vec, 1),
+  "Carving" = c(full_FWER_C, NA),
+  "Combined Carving" = c(full_FWER_D, NA),
+  "Data Splitting" = c(full_FWER_split, NA),
+  "PoSI Fraq" = c(full_power_avg_posi_fraq, NA),
+  "PoSI" = c(rep(NA, length(fraq.vec)), avg_fwer_posi)
+)
 
+# Convert data frames to long format
 data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
 
-PowerPlot<-ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-#  geom_point() +
-#  geom_text(label=labels_fraqs_D, nudge_x=0.03, nudge_y=0.03) +
-  labs(title = "Average Power", x = "Fraq", y = "Value") +
-  theme_minimal() + 
-  scale_color_discrete(labels=c('Carving', 'Combined Carving', 'Split','PoSI')) +
-  theme(plot.title = element_text(hjust = 0.5))
-PowerPlot
-
-ggsave("PowerPlot_diff_fraqs_no_labels.png", plot = PowerPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
+# Adjust fractions for points that overlap
+FWER_points_adjusted <- FWER_points_long %>%
+  group_by(Fraq, Value) %>%
+  mutate(
+    adjust_right = ifelse(duplicated(Value), 0.001, 0),
+    adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
+    adjust_total = adjust_right + adjust_left,
+    Fraq_adjusted = Fraq + adjust_total
+  ) %>%
+  ungroup()
 
 
-data_TypeI <- data.frame(
-  Fraq=fraq.vec,
-  "Avg Type I Error rate Carving" = full_type1_error_avg_C,
-  "Avg Type I Error rate Combined Carving" = full_type1_error_avg_D,
-  "Avg Type I Error rate Splitting" = full_type1_error_avg_split,
-  "Avg Type I Error rate Posi" = full_type1_error_avg_posi
-)
+PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
+  geom_line(na.rm = TRUE) +
+  geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3, na.rm = TRUE) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3, na.rm = TRUE) +
+  labs(title = "Average Power and FWER",
+       x = "Fractions used for selection", y = "Value") +
+  theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+  guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
-data_TypeI_long <- tidyr::gather(data_TypeI, "Type", "Value", -Fraq)
-
-TypeIPlot<-ggplot(data_TypeI_long, aes(x = Fraq, y = Value, color = Type)) +
-  geom_line() +
-  #geom_point() +
-  #geom_text(label=labels_fraqs_D, nudge_x=0.0002, nudge_y=0.0001) +
-  labs(title = "Average Type I error", x = "Fraq", y = "Value") +
-  theme_minimal() + 
-  scale_color_discrete(labels=c('Carving', 'Combined Carving', 'Split','PoSI')) +
-  theme(plot.title = element_text(hjust = 0.5))
-
-TypeIPlot
-
-ggsave("TypeIPlot_diff_fraqs_no_labels.png", plot = TypeIPlot, width = 8, height = 6,
+print(PowerPlot)
+ggsave("diff_fraqs_s=15_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 # Table for avg_fraq.vec.comb:
-
 df_fraqs<-round(t(data.frame(original=fraq.vec, average=avg_fraq.vec.comb)),3)

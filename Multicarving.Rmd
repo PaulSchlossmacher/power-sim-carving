@@ -594,7 +594,7 @@ Questions for Christoph:
     * email is good, just ask maybe if drysdale has had some concerns as well for his estimator
 * p. 9: Correction regarding $H_0$: Would it also be fine to take 2.3 and $\beta_j=0$
 * Ok to link the Github instead of putting the code into the appendix?
-* End of $\hat \beta^{PoSI}$: Here we wrote the distribution and the conditions for the truncated normal very formally. Is it ok to write a sentence after that, saying: From here onwards, we only write $\hat\beta \sim TN(..., \mathcal{V^-}(y))$ (i.e. only the conditioning, Drysdale also doesn't do it for example).
+* End of $\hat \beta^{PoSI}$: Here we wrote the distribution and the conditions for the truncated normal very formally. Is it ok to write a sentence after that, saying: From here onwards, we only write $\hat\beta \sim TN(..., \mathcal{V^-}(y))$ (i.e. only the conditioning, Drysdale also doesn't do it for example). - Done
     * Christoph says that this is okey, we can do whatever we seem to be more appropriate and understandable for the reader
 * Clear up notation discussion (see comment next to 2.5.0.2)
     * We can leave A and B, just set a notation which is consistent troughout all of the paper
@@ -609,18 +609,18 @@ Questions for Christoph:
 
 Bigger changes suggested by Christoph for us to do later:
 
-* Explain how and that the $A_0$ part in $\hat \beta^{PoSI}$ becomes 0.
+* Explain how and that the $A_0$ part in $\hat \beta^{PoSI}$ becomes 0 - Done.
 
-* Exchange all the cardinalities $\hat s$ by $\hat m$ (both for the general case in the PoSI section and also in the cases of $\hat M_A$)
+* Exchange all the cardinalities $\hat s$ by $\hat m$ (both for the general case in the PoSI section and also in the cases of $\hat M_A$) - Done
 
 * Check whether all of the $\hat{M}$ are really consistent 
 
-* Define $\hat \beta^{PoSI}$ properly
+* Define $\hat \beta^{PoSI}$ properly - Done
 
-* Add in each section which error we control (see his comment next to 2.5.0.1)
-    * Here this would maybe be best in section 2.1 to just mention the selective type one error too, and just stick onto christophs notation regarding the subscript in the probability symbol, as this is the setting under which we look at the probability
+* Add in each section which error we control (see his comment next to 2.5.0.1) - Done
+    * Here this would maybe be best in section 2.1 to just mention the selective type one error too, and just stick onto christophs notation regarding the subscript in the probability symbol, as this is the setting under which we look at the probability 
 
-* Change FWER dots to symbols and power lines to something visible in black and white format
+* Change FWER dots to symbols and power lines to something visible in black and white format - Done
 * Set all p-values to 1 if drysdales/splitting estimator is not working
 
 # Further literature

@@ -44,26 +44,25 @@ source(carve_combined_path)
 n <- 100
 p <- 200
 rho <- 0.6
-#fraq.vec <- c(0.7,0.8,0.9) #to reproduce the error
-#fraq.vec <- c(0.5,0.6,0.7,0.8)
-
-fraq.vec <- c(0.5, 0.95)
-#fraq.vec <- c(0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.99)
-
+#fraq.vec <- c(0.5,0.6,0.7)
+#fraq.vec <- c(0.7,0.8,0.9,0.95)
+#fraq.vec <- c(0.5, 0.9)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
-#More active variables than observations in Group B after the split:
-#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
-sel.index <- c(1,5,10,15,20)
+sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+#sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
-sparsity <- 5
+#RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma_squ <- 2 #Variance 1 instead of 2 before, to make it easier for Lasso to catch the variables
-nsim <- 3
+#SNR = 4
+SNR = 1.5
+sigma_squ = drop(var(y.true)) / SNR
+
+nsim <- 300
 sig.level <- 0.05
 new_fraq_threshold<-0
 fraq.vec.comb<-fraq.vec
@@ -113,22 +112,28 @@ plot_conf_matrix <- function(test_res_avg, name, nsim){
 
 
 #Initialization of metrics we want to keep track of
+#Note posi fraq will be computed on same selected data as data splitting, whereas just
+#posi data is computed on fraction = 1, so on all of the data
 f <- length(fraq.vec)
 full_test_res_D <- matrix(rep(0,4*f), nrow = f)
 full_test_res_C <- matrix(rep(0,4*f), nrow = f)
 full_test_res_split <- matrix(rep(0,4*f), nrow = f)
+full_test_res_posi_fraq <- matrix(rep(0,4*f), nrow = f)
 full_test_res_posi <- matrix(rep(0,4*f), nrow = f)
 full_power_avg_D <- rep(0,f)
 full_power_avg_C <- rep(0,f)
 full_power_avg_split <- rep(0,f)
+full_power_avg_posi_fraq <- rep(0,f)
 full_power_avg_posi <- rep(0,f)
 full_type1_error_avg_D <- rep(0,f)
 full_type1_error_avg_C <- rep(0,f)
 full_type1_error_avg_split <- rep(0,f)
+full_type1_error_avg_posi_fraq <- rep(0,f)
 full_type1_error_avg_posi <- rep(0,f)
 full_FWER_D <- rep(0,f)
 full_FWER_C <- rep(0,f)
 full_FWER_split <- rep(0,f)
+full_FWER_posi_fraq <- rep(0,f)
 full_FWER_posi <- rep(0,f)
 # To keep track of the average fraq used for beta^comb over all simulation runs:
 avg_fraq.vec.comb<-rep(0,f)
@@ -172,7 +177,7 @@ for(fraq_ind in  1:f){
        p_vals_D_fwer <- rep(1,p)
        p_vals_C_fwer <- rep(1,p)
        p_vals_split_fwer <- rep(1,p)
-       p_vals_posi_fwer <- rep(1,p)
+       p_vals_posi_fraq_fwer <- rep(1,p)
        print("0 variables where chosen by the lasso, but thats not a problem.t")
      }
      lambda <- split.select.list$lambda
@@ -205,7 +210,7 @@ for(fraq_ind in  1:f){
        empty_model_D <- TRUE
        p_vals_D_fwer <- rep(1,p)
        p_vals_split_fwer <- rep(1,p)
-       p_vals_posi_fwer <- rep(1,p)
+       p_vals_posi_fraq_fwer <- rep(1,p)
        print("0 variables where chosen by the lasso, but thats not a problem.")
      }
      #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
@@ -233,13 +238,30 @@ for(fraq_ind in  1:f){
        carve_D <-carve.comb(x,y,split = split_D, beta = beta_tmp_D, lambda = lambda_D, sigma=sigma_squ)
        p_vals_D_nofwer <- carve_D$pvals
        p_vals_split_nofwer <- beta.split(x, y, split=split_D, beta = beta_tmp_D, sigma=sigma_squ)$pvals_split
-       p_vals_posi_nofwer <- beta.posi(x, y, split=split_D, beta = beta_tmp_D,lambda=lambda_D, sigma=sigma_squ)$pvals#CHANGED LAMBDA TO LAMBDA_D
+       p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split_D, beta = beta_tmp_D,lambda=lambda_D, sigma=sigma_squ)$pvals#CHANGED LAMBDA TO LAMBDA_D
        
        chosen_D <- which(abs(beta_tmp_D)>0)
        model.size_D<- length(chosen_D)
        p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size_D, 1)
        p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size_D,1)
-       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size_D,1)
+       p_vals_posi_fraq_fwer <- pmin(p_vals_posi_fraq_nofwer*model.size_D,1)
+       
+     }
+     
+     #new selection event on all of the data for posi100
+     split.select.list.posi <- split.select(x,y,fraction = 1)
+     beta_tmp_posi <- split.select.list.posi$beta
+     lambda.posi <- split.select.list.posi$lambda
+     split.posi <- split.select.list.posi$split
+     chosen.posi <- which(abs(beta_tmp_posi)>0)
+     model.size.posi <- length(chosen.posi)
+     #handle empty model
+     if(sum(beta_tmp_posi!=0)==0){
+       p_vals_posi_fwer <- rep(1,p)
+     }
+     else{
+       p_vals_posi_nofwer = beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma=sigma_squ)$pvals
+       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size.posi,1)
        
      }
      
@@ -247,6 +269,7 @@ for(fraq_ind in  1:f){
      list(p_vals_D_fwer = p_vals_D_fwer, 
           p_vals_C_fwer = p_vals_C_fwer,
           p_vals_split_fwer = p_vals_split_fwer,
+          p_vals_posi_fraq_fwer = p_vals_posi_fraq_fwer,
           p_vals_posi_fwer = p_vals_posi_fwer,
           fraq.comb = fraq.vec.comb[fraq_ind])
    }
@@ -257,37 +280,45 @@ for(fraq_ind in  1:f){
   p_vals_D_fwer <- results$p_vals_D_fwer
   p_vals_C_fwer <- results$p_vals_C_fwer
   p_vals_split_fwer <- results$p_vals_split_fwer
+  p_vals_posi_fraq_fwer <- results$p_vals_posi_fraq_fwer
   p_vals_posi_fwer <- results$p_vals_posi_fwer
   #Compute confusion matrices, power and type1 error from parallel computation and average over all of them
   conf_matrices_D <- lapply(p_vals_D_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_C <- lapply(p_vals_C_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_split <-lapply(p_vals_split_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
+  conf_matrices_posi_fraq <-lapply(p_vals_posi_fraq_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrices_posi <-lapply(p_vals_posi_fwer, function(p_vals) conf_matrix(p_vals, sig.level = sig.level, beta = beta))
   conf_matrix_all_D <- do.call(rbind, conf_matrices_D)
   conf_matrix_all_C <- do.call(rbind, conf_matrices_C)
   conf_matrix_all_split <- do.call(rbind, conf_matrices_split)
+  conf_matrix_all_posi_fraq <- do.call(rbind, conf_matrices_posi_fraq)
   conf_matrix_all_posi <- do.call(rbind, conf_matrices_posi)
   #Averaging over metrics
   test_res_D_avg <- colMeans(conf_matrix_all_D)
   test_res_C_avg <- colMeans(conf_matrix_all_C)
   test_res_split_avg <- colMeans(conf_matrix_all_split)
+  test_res_posi_fraq_avg <- colMeans(conf_matrix_all_posi_fraq)
   test_res_posi_avg <- colMeans(conf_matrix_all_posi)
   power_avg_D <- test_res_D_avg[2]/(length(sel.index))
   power_avg_C <- test_res_C_avg[2]/(length(sel.index))
   power_avg_split <- test_res_split_avg[2]/(length(sel.index))
+  power_avg_posi_fraq <- test_res_posi_fraq_avg[2]/(length(sel.index))
   power_avg_posi <- test_res_posi_avg[2]/(length(sel.index))
   type1_error_avg_D <- test_res_D_avg[1]/(p-length(sel.index))
   type1_error_avg_C <- test_res_C_avg[1]/(p-length(sel.index))
   type1_error_avg_split <- test_res_split_avg[1]/(p-length(sel.index))
+  type1_error_avg_posi_fraq <- test_res_posi_fraq_avg[1]/(p-length(sel.index))
   type1_error_avg_posi <- test_res_posi_avg[1]/(p-length(sel.index))
   #Calculate FWER
   H0T_Rej_any_D <- lapply(p_vals_D_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_C <- lapply(p_vals_C_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_split <- lapply(p_vals_split_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
+  H0T_Rej_any_posi_fraq <- lapply(p_vals_posi_fraq_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   H0T_Rej_any_posi <- lapply(p_vals_posi_fwer, function(p_vals) any(p_vals<=sig.level & beta==0))
   FWER_D <- sum(do.call(rbind,H0T_Rej_any_D))/nsim
   FWER_C <- sum(do.call(rbind,H0T_Rej_any_C))/nsim
   FWER_split <- sum(do.call(rbind,H0T_Rej_any_split))/nsim
+  FWER_posi_fraq <- sum(do.call(rbind,H0T_Rej_any_posi_fraq))/nsim
   FWER_posi <- sum(do.call(rbind,H0T_Rej_any_posi))/nsim
   #Printing results of one fraction to console
   cat("Results for fraction", fraq.vec[fraq_ind], ":\n")
@@ -306,24 +337,33 @@ for(fraq_ind in  1:f){
   full_test_res_D[fraq_ind, ] <- test_res_D_avg
   full_test_res_C[fraq_ind, ] <- test_res_C_avg
   full_test_res_split[fraq_ind, ] <- test_res_split_avg
+  full_test_res_posi_fraq[fraq_ind, ] <- test_res_posi_fraq_avg
   full_test_res_posi[fraq_ind, ] <- test_res_posi_avg
   full_power_avg_D[fraq_ind] <- power_avg_D
   full_power_avg_C[fraq_ind] <- power_avg_C
   full_power_avg_split[fraq_ind] <- power_avg_split
+  full_power_avg_posi_fraq[fraq_ind] <- power_avg_posi_fraq
   full_power_avg_posi[fraq_ind] <- power_avg_posi
   full_type1_error_avg_D[fraq_ind] <- type1_error_avg_D
   full_type1_error_avg_C[fraq_ind] <- type1_error_avg_C
   full_type1_error_avg_split[fraq_ind] <- type1_error_avg_split
+  full_type1_error_avg_posi_fraq[fraq_ind] <- type1_error_avg_posi_fraq
   full_type1_error_avg_posi[fraq_ind] <- type1_error_avg_posi
   full_FWER_D[fraq_ind] <- FWER_D
   full_FWER_C[fraq_ind] <- FWER_C
   full_FWER_split[fraq_ind] <- FWER_split
+  full_FWER_posi_fraq[fraq_ind] <- FWER_posi_fraq
   full_FWER_posi[fraq_ind] <- FWER_posi
   
   
   #Storing fraq.vec.comb:
   avg_fraq.vec.comb[fraq_ind] = do.call(sum, results$fraq.comb)/nsim 
 }
+# Compute average results from PoSI estimator across all fractions, as it always worked with fraction 1
+avg_power_posi <- mean(full_power_avg_posi)
+avg_type1_error_posi <- mean(full_type1_error_avg_posi)
+avg_fwer_posi <- mean(full_FWER_posi)
+
 
 end.time <- Sys.time()
 total.time <- end.time - start.time

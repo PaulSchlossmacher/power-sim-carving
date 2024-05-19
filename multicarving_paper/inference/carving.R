@@ -114,7 +114,8 @@ carve.lasso <- function(X, y, ind, beta, tol.beta, lambda, sigma = NULL, family 
       # linear constraint as derived in Lee et al. 2016,
       # adjusted for the fact, that sampling is not from y1, but from a linear transformation thereof
       linear.part <- matrix(0,nrow = s,ncol = 2*s)
-      linear.part[, (s + 1):(2 * s)] <- -diag(z.E)
+      #linear.part[, (s + 1):(2 * s)] <- -diag(z.E)#changed for edge case when z.E is a single -1
+      linear.part[, (s + 1):(2 * s)] <- -diag(x = (z.E), nrow = s)
       b <- b1 
       
       # covariance of c(beta_hat_full, beta_hat_selection)
@@ -311,7 +312,8 @@ carve.lasso <- function(X, y, ind, beta, tol.beta, lambda, sigma = NULL, family 
     X.o <- rbind(matrix(X.E[ind, ], ncol=s), matrix(X.E[-ind, ], ncol=s))
     
     y.o <- c(y[ind], y[-ind])
-    A1 <- -diag(z.E) %*% C %*% t(X.E1)
+    #A1 <- -diag(z.E) %*% C %*% t(X.E1)#changed because of edge case when z.E is a single -1
+    A1 <- -diag(x = (z.E), nrow = s) %*% C %*% t(X.E1)
     A <- cbind(A1, matrix(0, nrow = dim(A1)[1], ncol = n - length(ind)))
     if (max(A %*% y.o - b1) > 0) stop("constraint error")
     Xinv <- ginv(X.o)

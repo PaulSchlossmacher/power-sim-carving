@@ -60,7 +60,7 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 #SNR = 4
-SNR = 1.5
+SNR = 10
 sigma_squ = drop(var(y.true)) / SNR
 
 nsim <- 300
@@ -370,7 +370,7 @@ total.time <- end.time - start.time
 cat("Total time needed for simulation:")
 print(total.time)
 
-save.image(file='Environment_diff_fraqs_s=15_SNR=1,5.RData')
+save.image(file='Environment_diff_fraqs_s=15_SNR=10.RData')
 #load('myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
 # --------------- Create plots --------------
 
@@ -422,7 +422,7 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
 print(PowerPlot)
-ggsave("diff_fraqs_s=15_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
+ggsave("diff_fraqs_s=15_SNR=10.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 # Table for avg_fraq.vec.comb:

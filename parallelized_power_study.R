@@ -50,8 +50,8 @@ rho <- 0.6
 fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
-sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
-#sel.index <- c(1,5,10,15,20)
+#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 #RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
@@ -61,6 +61,7 @@ y.true <- x %*% beta
 #SNR = 4
 SNR = 2
 sigma_squ = drop(var(y.true)) / SNR
+#sigma_squ = 1
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
 nsim <- 300
 sig.level <- 0.05
@@ -402,7 +403,7 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 #Save or load existing simulation environments
-save.image(file='Environment_s=15_SNR=1,5.RData')
+save.image(file='Environment_s=15_SNR=12d.RData')
 #load("simulation_environments/Environment_s=5_SNR=1,5.RData")
 
 
@@ -457,7 +458,7 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
 
 print(PowerPlot)
-ggsave("main_plot_s=15_SNR=1,5.png", plot = PowerPlot, width = 8, height = 6,
+ggsave("main_plot_s=15_SNR=12.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 

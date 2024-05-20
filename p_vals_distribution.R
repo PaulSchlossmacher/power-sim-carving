@@ -111,7 +111,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     }
     
   }
-  
+  p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
 
   sel.index <- which(beta_tmp != 0)
   #check screening condition
@@ -120,7 +120,6 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
       next
     }
     screening <- c(screening, TRUE)
-    p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
     p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     p_val_screen_count <- length(p_vals_screen)
   }
@@ -128,7 +127,6 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     if(p_val_noscreen_count > target_number){
       next
     }
-    p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
     p_vals_noscreen <- c(p_vals_noscreen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     screening <- c(screening, FALSE)
     p_val_noscreen_count <- length(p_vals_noscreen)

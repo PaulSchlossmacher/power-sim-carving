@@ -403,7 +403,7 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 #Save or load existing simulation environments
-save.image(file='Environment_s=15_SNR=12d.RData')
+save.image(file='Environment_s=5_SNR=2.RData')
 #load("simulation_environments/Environment_s=5_SNR=1,5.RData")
 
 
@@ -446,19 +446,22 @@ FWER_points_adjusted <- FWER_points_long %>%
 
 
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
-  geom_line(na.rm = TRUE) +
-  geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3, na.rm = TRUE) +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3, na.rm = TRUE) +
+  geom_line(size = 1,na.rm = TRUE) +
+  geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5, na.rm = TRUE) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2, na.rm = TRUE) +
   labs(title = "Average Power and FWER",
        x = "Fractions used for selection", y = "Value") +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,0.8)) +
   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
-  guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
+  scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash", "blank"))+
+  scale_shape_manual(values = c(0, 1, 2, 5, 7))+
+  guides(linetype = guide_legend(override.aes = list(size = 3, alpha = 0.5)))
+
 
 print(PowerPlot)
-ggsave("main_plot_s=15_SNR=12.png", plot = PowerPlot, width = 8, height = 6,
+ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
@@ -509,5 +512,55 @@ ggsave("main_plot_s=15_SNR=12.png", plot = PowerPlot, width = 8, height = 6,
 # 
 # print(PowerPlot2)
 
-
+#experiments
+# data_Power <- data.frame(
+#   Fraq = fraq.vec,
+#   "Carving" = full_power_avg_C,
+#   "Carving Sat." = full_power_avg_sat,
+#   "Combined Carving" = full_power_avg_D,
+#   "Data Splitting" = full_power_avg_split
+# )
+# 
+# FWER_points <- data.frame(
+#   Fraq = fraq.vec,
+#   "Carving" = full_FWER_C,
+#   "Carving Sat." = full_FWER_sat,
+#   "Combined Carving" = full_FWER_D,
+#   "Data Splitting" = full_FWER_split
+# )
+# 
+# # Convert data frames to long format
+# data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
+# FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
+# 
+# # Adjust fractions for points that overlap
+# FWER_points_adjusted <- FWER_points_long %>%
+#   group_by(Fraq, Value) %>%
+#   mutate(
+#     adjust_right = ifelse(duplicated(Value), 0.001, 0),
+#     adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
+#     adjust_total = adjust_right + adjust_left,
+#     Fraq_adjusted = Fraq + adjust_total
+#   ) %>%
+#   ungroup()
+# 
+# avg_power_posi_df <- data.frame(Fraq = 1, Value = avg_power_posi, Type = "PoSI")
+# avg_fwer_posi_df <- data.frame(Fraq = 1, Value = avg_fwer_posi, Type = "PoSI")
+# 
+# PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
+#   geom_line(size = 1,na.rm = TRUE) +
+#   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
+#   geom_point(data = avg_power_posi_df, aes(x = Fraq, y = Value), shape = 4, size = 3, color = "pink") +
+#   geom_point(data = avg_fwer_posi_df, aes(x = Fraq, y = Value), shape = 4, size = 3, color = "pink")+
+#   geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2, na.rm = TRUE) +
+#   labs(title = "Average Power and FWER",
+#        x = "Fractions used for selection", y = "Value") +
+#   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+#   scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,0.8)) +
+#   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+#   scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash",NA))+
+#   scale_shape_manual(values = c(0, 1, 2, 5,NA))
+# 
+# 
+# print(PowerPlot)
 

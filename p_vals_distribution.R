@@ -70,7 +70,6 @@ for (j in 1:dim(x)[2]){
   }
 }
 
-#nsim = 20
 counter <- 0
 screening <- c()
 
@@ -78,7 +77,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 5000
+target_number <- 2000
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -103,7 +102,6 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
       select.again <- TRUE
       print("0 variables where chosen by the lasso, repeating selection")
     }
-    #cat("We selected ", sum(beta_tmp!=0), " predictors.\n")
     lambda <- split.select.list$lambda
     split <- split.select.list$split
     if(sum(beta_tmp!=0)>min(n*fraq, n*(1-fraq))){
@@ -114,8 +112,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     
   }
   
-  p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
-  
+
   sel.index <- which(beta_tmp != 0)
   #check screening condition
   if (all(act.index %in% sel.index)){
@@ -123,6 +120,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
       next
     }
     screening <- c(screening, TRUE)
+    p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
     p_vals_screen <- c(p_vals_screen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     p_val_screen_count <- length(p_vals_screen)
   }
@@ -130,6 +128,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     if(p_val_noscreen_count > target_number){
       next
     }
+    p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
     p_vals_noscreen <- c(p_vals_noscreen, p_vals_D[sel.index][!(sel.index %in% act.index)])
     screening <- c(screening, FALSE)
     p_val_noscreen_count <- length(p_vals_noscreen)
@@ -156,7 +155,7 @@ plot_screen <- ggplot(p_vals_screen_df, aes(x = p_values)) +
     x = "x",
     y = expression(F[n](x))
   ) +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5))+
   scale_x_continuous(limits=c(0,1))+
   scale_y_continuous(limits=c(0,1))
 
@@ -178,7 +177,7 @@ plot_noscreen <- ggplot(p_vals_noscreen_df, aes(x = p_values)) +
 grid.arrange(plot_screen, plot_noscreen, ncol = 2)
 #Safe them as a single image
 g <- arrangeGrob(plot_screen, plot_noscreen, ncol = 2)
-ggsave("ecdf_plots_screen_and_noscreen.png", g, width = 10, height = 5)
+#ggsave("ecdf_plots_screen_and_noscreen.png", g, width = 10, height = 5)
 
 #Optional: plot a histogram of p-values under screening
 # ggplot(p_vals_screen_df, aes(x = p_values)) +

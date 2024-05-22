@@ -47,11 +47,13 @@ rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.5, 0.9)
-fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
 sel.index <- c(1,5,10,15,20)
+sparsity <- length(sel.index)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 #RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
@@ -59,14 +61,15 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 #SNR = 4
-SNR = 2
-sigma_squ = drop(var(y.true)) / SNR
+SNR <- 2
+sigma_squ <- drop(var(y.true)) / SNR
+sigma <- sqrt(sigma_squ)
 #sigma_squ = 1
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 300
+nsim <- 50
 sig.level <- 0.05
 flexible_selection  <- FALSE #should we allow more selections for data splitting approach
-flexible_selection_count <- 50
+flexible_selection_count <- 5
 
 
 total.time <- 0
@@ -166,11 +169,12 @@ for(fraq_ind in  1:f){
     select.again <- TRUE
     empty_model <- FALSE
     splitting_estimator_failed <- FALSE
+    flexible_selection_par <- flexible_selection#Should be reset before every round
     select.again.counter = 0
     while(select.again){
-      if (select.again.counter > flexible_selection_count){
+      if (select.again.counter >= flexible_selection_count){
         warning("Tried to many selection events and not one of them was conformable for beta_comb and beta_split")
-        flexible_selection <- FALSE
+        flexible_selection_par <- FALSE
       }
       select.again <- FALSE
       y <- y.true + sqrt(sigma_squ) * rnorm(n)
@@ -189,12 +193,12 @@ for(fraq_ind in  1:f){
       }
       lambda <- split.select.list$lambda
       split <- split.select.list$split
-      if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && flexible_selection){
+      if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && flexible_selection_par){
         select.again <- TRUE
         select.again.counter <- select.again.counter + 1
         logs <- c(logs,"Need to split again because we selected more variables than beta_D & beta_split can handle")
       }
-      else if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && !flexible_selection){
+      else if(sum(beta_tmp!=0)>min(n*fraq.vec[fraq_ind], n*(1-fraq.vec[fraq_ind])) && !flexible_selection_par){
         p_vals_D_fwer <- rep(1,p)
         p_vals_split_fwer <- rep(1,p)
         p_vals_posi_fraq_fwer <- rep(1,p)
@@ -207,21 +211,21 @@ for(fraq_ind in  1:f){
     
     if(!empty_model && !splitting_estimator_failed){
       #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
-      carve_D <-carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma=sigma_squ)
+      carve_D <-carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda, sigma_squ=sigma_squ)
       p_vals_D_nofwer <- carve_D$pvals
       
-      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
       p_vals_C_nofwer<-carve_C$pv
       
       #Note: selected=FALSE for saturated model
-      carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+      carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
       p_vals_sat_nofwer<-carve_sat$pv
       
-      p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma=sigma_squ)$pvals_split
+      p_vals_split_nofwer <- beta.split(x, y, split=split, beta=beta_tmp, sigma_squ=sigma_squ)$pvals_split
       
-      p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma=sigma_squ)$pvals
+      p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split, beta=beta_tmp,lambda=lambda, sigma_squ=sigma_squ)$pvals
       
       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
       p_vals_comp_C<-rep(1,p)
@@ -241,11 +245,11 @@ for(fraq_ind in  1:f){
     }
     #we selected something but data splitting failed, so we compute only the estimators that dont depend on it
     else if(!empty_model){
-      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+      carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
       p_vals_C_nofwer<-carve_C$pv
       
-      carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma_squ,
+      carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
       p_vals_sat_nofwer<-carve_sat$pv
 
@@ -274,7 +278,7 @@ for(fraq_ind in  1:f){
       p_vals_posi_fwer <- rep(1,p)
     }
     else{
-      p_vals_posi_nofwer = beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma=sigma_squ)$pvals
+      p_vals_posi_nofwer = beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma_squ=sigma_squ)$pvals
       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size.posi,1)
       
     }
@@ -403,8 +407,17 @@ rep_select_df <- data.frame(fractions = fraq.vec, repeated_selections = repeated
 print(rep_select_df)
 
 #Save or load existing simulation environments
-save.image(file='Environment_s=5_SNR=2.RData')
-#load("simulation_environments/Environment_s=5_SNR=1,5.RData")
+if (flexible_selection){
+  filename <- sprintf("Environment_m=%d_SNR=%.1f_allowed_fails", sparsity, SNR)
+}else{
+  filename <- sprintf("Environment_m=%d_SNR=%.1f", sparsity, SNR)
+  
+}
+filename <- gsub(".0", "", filename)
+filename <- sub("\\.", ",", filename)
+filename <- paste0(filename,".RData")
+save.image(file=filename)
+#load("simulation_environments/Environment_s=5_SNR=2.RData")
 
 
 # --------------- Create main power plots --------------
@@ -448,21 +461,39 @@ FWER_points_adjusted <- FWER_points_long %>%
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
   geom_line(size = 1,na.rm = TRUE) +
   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
-  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5, na.rm = TRUE) +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2, na.rm = TRUE) +
-  labs(title = "Average Power and FWER",
-       x = "Fractions used for selection", y = "Value") +
-  theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,0.8)) +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5,stroke = 1.2, na.rm = TRUE) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2.5, stroke = 1.2,alpha = 0.7, na.rm = TRUE) +
+  labs(title = "m = 5, SNR = 2, max_rep_sel = 5",
+       x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 25),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    #legend.position = "none",
+    legend.position = c(0.85,0.85),
+    legend.text = element_text(size = 14),
+    legend.title = element_blank(),
+    legend.key.size = unit(2, "lines"),
+    legend.background = element_rect( color = "black"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    axis.ticks.length = unit(0.25, "cm")
+  )+
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,1)) +
   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
   scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash", "blank"))+
   scale_shape_manual(values = c(0, 1, 2, 5, 7))+
-  guides(linetype = guide_legend(override.aes = list(size = 3, alpha = 0.5)))
+  guides(linetype = guide_legend(override.aes = list(size = 3,alpha = 0.5)))
 
 
 print(PowerPlot)
-ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
-       units = "in", dpi = 300, bg = "#F0F0F0")
+# ggsave("main_plot_s=5_SNR=1.5.png", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
+# ggsave("s=5_SNR=2_allowed_fails.png", plot = PowerPlot, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
 # --------------- Create plots for visualization of power composition in combined carving estimator --------------
@@ -500,17 +531,38 @@ ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
 #   ungroup()
 # 
 # PowerPlot2 <- ggplot(data_Power2_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
-#   geom_line() +
-#   geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-#   geom_point(data = FWER_points_adjusted2, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3) +
-#   labs(title = "Average Power (-) and FWER (o)",
-#        x = "Fractions used for selection", y = "Value") +
-#   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
+#   geom_line(size = 1) +
+#   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
+#   geom_point(data = FWER_points_adjusted2, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type),  size = 2.5, stroke = 1.2,alpha = 0.7) +
+#   labs(title = "m = 5, SNR = 2",
+#        x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
+#   theme_minimal() + 
+#   theme(
+#     plot.title = element_text(hjust = 0.5, size = 25),
+#     axis.title.x = element_text(size = 20),
+#     axis.title.y = element_text(size = 20),
+#     #legend.position = "none",
+#     legend.position = c(0.85,0.85),
+#     legend.text = element_text(size = 14),
+#     legend.title = element_blank(),
+#     legend.key.size = unit(2, "lines"),
+#     legend.background = element_rect( color = "black"),
+#     axis.text.x = element_text(size = 12),
+#     axis.text.y = element_text(size = 12),
+#     axis.line = element_line(color = "black"),
+#     axis.ticks = element_line(color = "black"),
+#     axis.ticks.length = unit(0.25, "cm")
+#   )+
 #   scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
 #   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
-#   guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
+#   scale_linetype_manual(values = c("solid","dotdash", "longdash"))+
+#   scale_shape_manual(values = c(2, 3, 1))+
+#   guides(linetype = guide_legend(override.aes = list(size = 3,alpha = 0.5)))
 # 
 # print(PowerPlot2)
+# ggsave("combined_plot_s=5_SNR=2.png", plot = PowerPlot2, width = 8, height = 6,
+#        units = "in", dpi = 300, bg = "#F0F0F0")
+
 
 #experiments
 # data_Power <- data.frame(
@@ -520,7 +572,7 @@ ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
 #   "Combined Carving" = full_power_avg_D,
 #   "Data Splitting" = full_power_avg_split
 # )
-# 
+#
 # FWER_points <- data.frame(
 #   Fraq = fraq.vec,
 #   "Carving" = full_FWER_C,
@@ -528,11 +580,11 @@ ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
 #   "Combined Carving" = full_FWER_D,
 #   "Data Splitting" = full_FWER_split
 # )
-# 
+#
 # # Convert data frames to long format
 # data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
 # FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
-# 
+#
 # # Adjust fractions for points that overlap
 # FWER_points_adjusted <- FWER_points_long %>%
 #   group_by(Fraq, Value) %>%
@@ -543,10 +595,10 @@ ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
 #     Fraq_adjusted = Fraq + adjust_total
 #   ) %>%
 #   ungroup()
-# 
+#
 # avg_power_posi_df <- data.frame(Fraq = 1, Value = avg_power_posi, Type = "PoSI")
 # avg_fwer_posi_df <- data.frame(Fraq = 1, Value = avg_fwer_posi, Type = "PoSI")
-# 
+#
 # PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
 #   geom_line(size = 1,na.rm = TRUE) +
 #   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
@@ -560,7 +612,7 @@ ggsave("main_plot_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
 #   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
 #   scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash",NA))+
 #   scale_shape_manual(values = c(0, 1, 2, 5,NA))
-# 
-# 
+#
+#
 # print(PowerPlot)
 

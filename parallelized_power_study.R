@@ -408,21 +408,25 @@ print(rep_select_df)
 
 #Save or load existing simulation environments
 if (flexible_selection){
-  filename <- sprintf("Environment_m=%d_SNR=%.1f_allowed_fails", sparsity, SNR)
+  filename <- sprintf("m=%d_SNR=%.1f_allowed_fails", sparsity, SNR)
 }else{
-  filename <- sprintf("Environment_m=%d_SNR=%.1f", sparsity, SNR)
-  
+  filename <- sprintf("m=%d_SNR=%.1f", sparsity, SNR)
 }
 filename <- gsub(".0", "", filename)
 filename <- sub("\\.", ",", filename)
-filename <- paste0(filename,".RData")
-save.image(file=filename)
+environment_name <- paste0("Environment_",filename,".RData")
+plot_name <- paste0("main_plot_",filename,".png")
+save.image(file=environment_name)
 #load("simulation_environments/Environment_s=5_SNR=2.RData")
 
 
 # --------------- Create main power plots --------------
-
-
+if (flexible_selection){
+  main_title <- sprintf("m = %d, SNR = %.1f, max_rep_sel = %d", sparsity, SNR, flexible_selection_count)
+}else{
+  main_title <- sprintf("m = %d, SNR = %.1f", sparsity, SNR)
+}
+main_title <- gsub(".0", "", main_title)
 #Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
   Fraq = c(fraq.vec, 1),
@@ -463,7 +467,7 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
   geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5,stroke = 1.2, na.rm = TRUE) +
   geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2.5, stroke = 1.2,alpha = 0.7, na.rm = TRUE) +
-  labs(title = "m = 5, SNR = 2, max_rep_sel = 5",
+  labs(title = main_title,
        x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
   theme_minimal() +
   theme(
@@ -490,15 +494,14 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
 
 
 print(PowerPlot)
-# ggsave("main_plot_s=5_SNR=1.5.png", plot = PowerPlot, width = 8, height = 6,
-#        units = "in", dpi = 300, bg = "#F0F0F0")
-# ggsave("s=5_SNR=2_allowed_fails.png", plot = PowerPlot, width = 8, height = 6,
-#        units = "in", dpi = 300, bg = "#F0F0F0")
+ggsave(plot_name, plot = PowerPlot, width = 8, height = 6,
+       units = "in", dpi = 300, bg = "#F0F0F0")
 
 
 # --------------- Create plots for visualization of power composition in combined carving estimator --------------
 
 # -------- Create plots for visualization of power composition in combined carving estimator ---------
+#plot_name2 <- paste0("combined_plot_",filename,".png")
 
 #Need those NA's to integrate posi at fraction 1
 # data_Power2 <- data.frame(
@@ -560,59 +563,8 @@ print(PowerPlot)
 #   guides(linetype = guide_legend(override.aes = list(size = 3,alpha = 0.5)))
 # 
 # print(PowerPlot2)
-# ggsave("combined_plot_s=5_SNR=2.png", plot = PowerPlot2, width = 8, height = 6,
+# ggsave(plot_name2, plot = PowerPlot2, width = 8, height = 6,
 #        units = "in", dpi = 300, bg = "#F0F0F0")
 
 
-#experiments
-# data_Power <- data.frame(
-#   Fraq = fraq.vec,
-#   "Carving" = full_power_avg_C,
-#   "Carving Sat." = full_power_avg_sat,
-#   "Combined Carving" = full_power_avg_D,
-#   "Data Splitting" = full_power_avg_split
-# )
-#
-# FWER_points <- data.frame(
-#   Fraq = fraq.vec,
-#   "Carving" = full_FWER_C,
-#   "Carving Sat." = full_FWER_sat,
-#   "Combined Carving" = full_FWER_D,
-#   "Data Splitting" = full_FWER_split
-# )
-#
-# # Convert data frames to long format
-# data_Power_long <- tidyr::gather(data_Power, "Type", "Value", -Fraq)
-# FWER_points_long <- tidyr::gather(FWER_points, "Type", "Value", -Fraq)
-#
-# # Adjust fractions for points that overlap
-# FWER_points_adjusted <- FWER_points_long %>%
-#   group_by(Fraq, Value) %>%
-#   mutate(
-#     adjust_right = ifelse(duplicated(Value), 0.001, 0),
-#     adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
-#     adjust_total = adjust_right + adjust_left,
-#     Fraq_adjusted = Fraq + adjust_total
-#   ) %>%
-#   ungroup()
-#
-# avg_power_posi_df <- data.frame(Fraq = 1, Value = avg_power_posi, Type = "PoSI")
-# avg_fwer_posi_df <- data.frame(Fraq = 1, Value = avg_fwer_posi, Type = "PoSI")
-#
-# PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
-#   geom_line(size = 1,na.rm = TRUE) +
-#   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
-#   geom_point(data = avg_power_posi_df, aes(x = Fraq, y = Value), shape = 4, size = 3, color = "pink") +
-#   geom_point(data = avg_fwer_posi_df, aes(x = Fraq, y = Value), shape = 4, size = 3, color = "pink")+
-#   geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2, na.rm = TRUE) +
-#   labs(title = "Average Power and FWER",
-#        x = "Fractions used for selection", y = "Value") +
-#   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
-#   scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,0.8)) +
-#   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
-#   scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash",NA))+
-#   scale_shape_manual(values = c(0, 1, 2, 5,NA))
-#
-#
-# print(PowerPlot)
 

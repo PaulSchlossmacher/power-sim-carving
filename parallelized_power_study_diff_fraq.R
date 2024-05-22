@@ -51,8 +51,8 @@ rho <- 0.6
 fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
-sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
-#sel.index <- c(1,5,10,15,20)
+#sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
+sel.index <- c(1,5,10,15,20)
 beta <- rep(0, p)
 beta[sel.index] <- 1
 #RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
@@ -60,7 +60,7 @@ set.seed(42)
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
 #SNR = 4
-SNR = 10
+SNR = 2
 sigma_squ = drop(var(y.true)) / SNR
 
 nsim <- 300
@@ -370,9 +370,8 @@ total.time <- end.time - start.time
 cat("Total time needed for simulation:")
 print(total.time)
 
-save.image(file='Environment_diff_fraqs_s=15_SNR=10.RData')
-#load('myEnvironment_nsim200_5active_sigma2_diff_fraqs.RData')
-# --------------- Create plots --------------
+save.image(file='Environment_diff_fraqs_s=5_SNR=2.RData')
+
 
 #Need those NA's to integrate posi at fraction 1
 data_Power <- data.frame(
@@ -410,19 +409,22 @@ FWER_points_adjusted <- FWER_points_long %>%
 
 
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
-  geom_line(na.rm = TRUE) +
-  geom_hline(yintercept = sig.level, color = "red", linetype = "dashed") +
-  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = Fraq, y = Value), size = 3, na.rm = TRUE) +
-  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 3, na.rm = TRUE) +
+  geom_line(size = 1,na.rm = TRUE) +
+  geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5, na.rm = TRUE) +
+  geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2, na.rm = TRUE) +
   labs(title = "Average Power and FWER",
        x = "Fractions used for selection", y = "Value") +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5)) +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0,0.8)) +
   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
-  guides(color = guide_legend(title = "Type"), shape = guide_legend(title = "Type"), linetype = guide_legend(title = "Type"))
+  scale_linetype_manual(values = c("solid", "longdash", "dotdash", "twodash", "blank"))+
+  scale_shape_manual(values = c(0, 1, 2, 5, 7))+
+  guides(linetype = guide_legend(override.aes = list(size = 3, alpha = 0.5)))
+
 
 print(PowerPlot)
-ggsave("diff_fraqs_s=15_SNR=10.png", plot = PowerPlot, width = 8, height = 6,
+ggsave("diff_fraqs_s=5_SNR=2.png", plot = PowerPlot, width = 8, height = 6,
        units = "in", dpi = 300, bg = "#F0F0F0")
 
 # Table for avg_fraq.vec.comb:

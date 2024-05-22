@@ -1,20 +1,20 @@
-#Trying to create a more extreme Toeplitz example with less noise to 
-#encourage Lasso to use more variables:
-# Clear all variables
+#This file creates a visualization of the distribution of p-values of truly inactive coefficients in beta_comb 
+#under screening and without screening
+#Clear all variables
 rm(list = ls())
 
 
-#Local, user specific path, that should work for both of us:
+#Local & user specific path
 Local_path<-getwd()
-hdi_adjustments_path<-paste(Local_path, "/Multicarving-Christoph/inference/hdi_adjustments.R", sep="")
-carving_path<-paste(Local_path, "/Multicarving-Christoph/inference/carving.R", sep="")
-sample_from_truncated_path<-paste(Local_path, "/Multicarving-Christoph/inference/sample_from_truncated.R", sep="")
-tryCatchWE_path<-paste(Local_path, "/Multicarving-Christoph/inference/tryCatch-W-E.R", sep="")
+hdi_adjustments_path<-paste(Local_path, "/multicarving_paper/inference/hdi_adjustments.R", sep="")
+carving_path<-paste(Local_path, "/multicarving_paper/inference/carving.R", sep="")
+sample_from_truncated_path<-paste(Local_path, "/multicarving_paper/inference/sample_from_truncated.R", sep="")
+tryCatchWE_path<-paste(Local_path, "/multicarving_paper/inference/tryCatch-W-E.R", sep="")
 
-#Different paths here, because they're "our own" functions
+#Different paths here, because they're in a different directory
 SNTN_distribution_path<-paste(Local_path, "/SNTN_distribution.R", sep="")
 split_select_function_path<-paste(Local_path, "/split_select.R", sep="")
-carve_linear_path<-paste(Local_path, "/carve_linear.R", sep="")
+carve_combined_path<-paste(Local_path, "/carve_combined.R", sep="")
 
 
 library(MASS)
@@ -26,11 +26,12 @@ library(hdi)
 library(selectiveInference)
 library(doSNOW)
 library(parallel)
+library(doParallel)
 library(doRNG)
 library(truncnorm)
-library(git2r)
 library(ggplot2)
-
+library(dplyr)
+library(gridExtra)
 
 source(hdi_adjustments_path)
 source(carving_path)
@@ -38,7 +39,7 @@ source(sample_from_truncated_path)
 source(tryCatchWE_path)
 source(SNTN_distribution_path)
 source(split_select_function_path)
-source(carve_linear_path)
+source(carve_combined_path)
 
 
 
@@ -47,7 +48,6 @@ n <- 100
 p <- 200
 rho <- 0.6
 fraq = 0.7
-#fraq.vec <- c(0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #More active variables than observations in Group B after the split:
@@ -58,8 +58,8 @@ sparsity <- 5
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-SNR <- 1.713766 # value created for Toeplitz 0.6
-sigma <- 1.9 #Variance 1.9 instead of 2 before, to make screening about as often successful as not
+SNR = 2
+sigma_squ = drop(var(y.true)) / SNR
 
 #Normalize x before starting, y will also be normalized, but at each iteration, as it is always chosen with new noise
 for (j in 1:dim(x)[2]){
@@ -70,7 +70,6 @@ for (j in 1:dim(x)[2]){
   }
 }
 
-#nsim = 20
 counter <- 0
 screening <- c()
 
@@ -89,12 +88,12 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
   select.again.counter = 0
   while(select.again){
     if (select.again.counter > 50){
-      stop("Tried to many selection events and not one of them was conformable for beta_Drysdale")
+      stop("Tried to many selection events and not one of them was conformable for carve.comb")
     }
     select.again <- FALSE
     set.seed(counter)
     counter <- counter + 1
-    y <- y.true + sqrt(sigma) * rnorm(n)
+    y <- y.true + sqrt(sigma_squ) * rnorm(n)
     y <- y - mean(y)
     split.select.list <- split.select(x,y,fraction = fraq)
     beta_tmp <- split.select.list$beta
@@ -103,19 +102,17 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
       select.again <- TRUE
       print("0 variables where chosen by the lasso, repeating selection")
     }
-    #cat("We selected ", sum(beta_tmp!=0), " predictors.\n")
     lambda <- split.select.list$lambda
     split <- split.select.list$split
     if(sum(beta_tmp!=0)>min(n*fraq, n*(1-fraq))){
       select.again <- TRUE
       select.again.counter <- select.again.counter + 1
-      print("Need to split again because we selected more variables than beta_D can handle")
+      print("Need to split again because we selected more variables than carve.comb can handle")
     }
     
   }
-  
-  p_vals_D <- carve.linear(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma=sigma)$pvals
-  
+  p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
+
   sel.index <- which(beta_tmp != 0)
   #check screening condition
   if (all(act.index %in% sel.index)){
@@ -143,16 +140,53 @@ cat("We had ", sum(screening), " successful screenings out of ", rounds, " simul
 print(length(p_vals_screen))
 print(length(p_vals_noscreen))
 
-#Create and save ecdf-plots to see how well the p-values match a uniform distribution
-png("ecdf_plots_screen_and_noscreen.png",width = 800, height = 400)
-par(mfrow = c(1,2))
-plot(ecdf(p_vals_screen),xlim = c(0, 1), ylim = c(0, 1), main = "P-values under screening(ecdf)")
-abline(0,1, col = "red")
-plot(ecdf(p_vals_noscreen),xlim = c(0, 1), ylim = c(0, 1), main = "P-values without screening(ecdf)")
-abline(0, 1, col = "red")
-dev.off()
+p_vals_screen_df <- data.frame(p_values = p_vals_screen, Type = "Screening")
+p_vals_noscreen_df <- data.frame(p_values = p_vals_noscreen, Type = "No Screening")
+p_vals_df <- rbind(p_vals_screen_df, p_vals_noscreen_df)
 
-# #Plot a histogram of p_values under screening
-# png("histogram.png",width = 350, height = 300)
-# hist(p_vals_screen, main = "Histogram of p-values under screening")
-# dev.off()
+plot_screen <- ggplot(p_vals_screen_df, aes(x = p_values)) +
+  stat_ecdf(color = "black") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = expression("Screening"),
+    x = "x",
+    y = expression(F[n](x))
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_continuous(limits=c(0,1))+
+  scale_y_continuous(limits=c(0,1))
+
+plot_noscreen <- ggplot(p_vals_noscreen_df, aes(x = p_values)) +
+  stat_ecdf(color = "black") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = expression("No screening"),
+    x = "x",
+    y = expression(F[n](x))
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_continuous(limits=c(0,1))+
+  scale_y_continuous(limits=c(0,1))
+
+
+#print the obtained plots side by side
+grid.arrange(plot_screen, plot_noscreen, ncol = 2)
+#Safe them as a single image
+g <- arrangeGrob(plot_screen, plot_noscreen, ncol = 2)
+#ggsave("ecdf_plots_screen_and_noscreen.png", g, width = 10, height = 5)
+
+#Optional: plot a histogram of p-values under screening
+# ggplot(p_vals_screen_df, aes(x = p_values)) +
+#   geom_histogram(binwidth = 0.05, fill = "darkblue", color = "black") +
+#   theme_minimal() +
+#   labs(
+#     title = expression("Histogram of" ~ italic("p") ~ "-values under Screening"),
+#     x = "x",
+#     y = "Frequency"
+#   ) +
+#   theme(plot.title = element_text(hjust = 0.5))
+# 
+
+

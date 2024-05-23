@@ -126,10 +126,20 @@ carve.comb <- function(x, y, split, beta, lambda,sigma_squ){
     warning("A.1%*%y.a>b.1, conditioning is not fulfilled")
   }
   
-  pv <- 2*pmin(cdf, 1-cdf)
   pvals <- rep(1,p)
-  pvals[chosen] <- pv
+  #for two sided p-values
+  #pv <- 2*pmin(cdf, 1-cdf)
+  #pvals[chosen] <- pv
   
+  #for one-sided p-values
+  for (i in 1:s){
+    if (beta[chosen[i]] > 0) {
+      pvals[chosen[i]] <- 1-cdf[i]
+    } else {
+      pvals[chosen[i]] <- cdf[i]
+    }
+  }
+
   #Give warnings if we have pvals outside of [0,1]
   out_of_range_pvals <- pvals[pvals < 0 | pvals > 1]
   if (length(out_of_range_pvals) > 0) {
@@ -171,8 +181,15 @@ beta.split <- function(x, y, split, beta, sigma_squ){
   pvals <- rep(1,p)
   for (i in 1:s){
     cdf <- pnorm(beta_split[i],mean = 0, sd = sqrt(var_vector[i]))
-    pv <- 2*min(cdf, 1-cdf)
-    pvals[chosen[i]] <- pv
+    #for two sided tests
+    #pv <- 2*min(cdf, 1-cdf)
+    #pvals[chosen[i]] <- pv
+    #for one sided tests
+    if (beta[chosen[i]] > 0) {
+      pvals[chosen[i]] <- 1-cdf
+    } else {
+      pvals[chosen[i]] <- cdf
+    }
   }
   return(list(pvals_split = pvals, beta_split = beta_split))
 }
@@ -265,8 +282,15 @@ beta.posi <- function(x, y, split, beta, lambda,
 
     #pnormTrunc can not handle probabilites that are very close to 1
     cdf<-ifelse(is.nan(cdf), repl_for_1, cdf)
-    pv <- 2*min(cdf, 1-cdf)
-    pvals[chosen[i]] <- pv
+    #for two sided p-values
+    #pv <- 2*min(cdf, 1-cdf)
+    #pvals[chosen[i]] <- pv
+    #for one-sided p-values
+    if (beta[chosen[i]] > 0) {
+      pvals[chosen[i]] <- 1-cdf
+    } else {
+      pvals[chosen[i]] <- cdf
+    }
   }
   
   return(list(pvals=pvals, beta_posi=beta_posi,vlo = vlo, vup = vup))

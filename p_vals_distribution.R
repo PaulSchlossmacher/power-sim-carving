@@ -77,7 +77,7 @@ screening <- c()
 #Just collect all of them in one vector, as we dont care in which simulation round we obtained them
 p_vals_screen <- c()
 p_vals_noscreen <- c()
-target_number <- 2000
+target_number <- 10000
 p_val_screen_count <-  0
 p_val_noscreen_count <- 0
 rounds <- 0
@@ -112,7 +112,7 @@ while (p_val_screen_count < target_number || p_val_noscreen_count < target_numbe
     
   }
   p_vals_D <- carve.comb(x,y,split = split, beta = beta_tmp, lambda = lambda,sigma_squ=sigma_squ)$pvals
-
+  
   sel.index <- which(beta_tmp != 0)
   #check screening condition
   if (all(act.index %in% sel.index)){
@@ -175,18 +175,18 @@ plot_noscreen <- ggplot(p_vals_noscreen_df, aes(x = p_values)) +
 grid.arrange(plot_screen, plot_noscreen, ncol = 2)
 #Safe them as a single image
 g <- arrangeGrob(plot_screen, plot_noscreen, ncol = 2)
-#ggsave("ecdf_plots_screen_and_noscreen.png", g, width = 10, height = 5)
+ggsave("ecdf_plots_screen_and_noscreen.png", g, width = 10, height = 5)
 
 #Optional: plot a histogram of p-values under screening
-# ggplot(p_vals_screen_df, aes(x = p_values)) +
-#   geom_histogram(binwidth = 0.05, fill = "darkblue", color = "black") +
-#   theme_minimal() +
-#   labs(
-#     title = expression("Histogram of" ~ italic("p") ~ "-values under Screening"),
-#     x = "x",
-#     y = "Frequency"
-#   ) +
-#   theme(plot.title = element_text(hjust = 0.5))
-# 
+#Optional: plot a histogram of p-values under screening
+# hist(p_vals_screen_df$p_values,
+#      breaks = seq(0, 1, by = 0.1),
+#      main = expression("Histogram of" ~ italic("p") ~ "-values under Screening"),
+#      xlab = "p-values",
+#      ylab = "Frequency",
+#      col = "darkblue",
+#      border = "black",
+#      xlim = c(0, 1),
+#      freq = TRUE)
 
 

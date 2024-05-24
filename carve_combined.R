@@ -182,14 +182,14 @@ beta.split <- function(x, y, split, beta, sigma_squ){
   for (i in 1:s){
     cdf <- pnorm(beta_split[i],mean = 0, sd = sqrt(var_vector[i]))
     #for two sided tests
-    #pv <- 2*min(cdf, 1-cdf)
-    #pvals[chosen[i]] <- pv
+    pv <- 2*min(cdf, 1-cdf)
+    pvals[chosen[i]] <- pv
     #for one sided tests
-    if (beta[chosen[i]] > 0) {
-      pvals[chosen[i]] <- 1-cdf
-    } else {
-      pvals[chosen[i]] <- cdf
-    }
+    # if (beta[chosen[i]] > 0) {
+    #   pvals[chosen[i]] <- 1-cdf
+    # } else {
+    #   pvals[chosen[i]] <- cdf
+    # }
   }
   return(list(pvals_split = pvals, beta_split = beta_split))
 }

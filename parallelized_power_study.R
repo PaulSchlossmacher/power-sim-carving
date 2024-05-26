@@ -47,8 +47,8 @@ rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.5, 0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
-fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+#fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -66,7 +66,7 @@ sigma_squ <- drop(var(y.true)) / SNR
 sigma <- sqrt(sigma_squ)
 #sigma_squ = 1
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 50
+nsim <- 300
 sig.level <- 0.05
 flexible_selection  <- FALSE #should we allow more selections for data splitting approach
 flexible_selection_count <- 5
@@ -416,8 +416,8 @@ filename <- gsub(".0", "", filename)
 filename <- sub("\\.", ",", filename)
 environment_name <- paste0("Environment_",filename,".RData")
 plot_name <- paste0("main_plot_",filename,".png")
-save.image(file=environment_name)
-#load("simulation_environments/Environment_s=5_SNR=2.RData")
+#save.image(file=environment_name)
+load("paper_environments/Environment_m=5_SNR=2.RData")
 
 
 # --------------- Create main power plots --------------
@@ -465,7 +465,7 @@ FWER_points_adjusted <- FWER_points_long %>%
 PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type), na.rm = TRUE) +
   geom_line(size = 1,na.rm = TRUE) +
   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
-  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 2.5,stroke = 1.2, na.rm = TRUE) +
+  geom_point(data = data_Power_long %>% filter(Fraq == 1), aes(x = 1, y = Value),size = 3.5,stroke = 1.2, na.rm = TRUE) +
   geom_point(data = FWER_points_adjusted, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type), size = 2.5, stroke = 1.2,alpha = 0.7, na.rm = TRUE) +
   labs(title = main_title,
        x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
@@ -474,14 +474,14 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
     plot.title = element_text(hjust = 0.5, size = 25),
     axis.title.x = element_text(size = 20),
     axis.title.y = element_text(size = 20),
-    #legend.position = "none",
-    legend.position = c(0.85,0.85),
-    legend.text = element_text(size = 14),
-    legend.title = element_blank(),
-    legend.key.size = unit(2, "lines"),
-    legend.background = element_rect( color = "black"),
-    axis.text.x = element_text(size = 12),
-    axis.text.y = element_text(size = 12),
+    legend.position = "none",
+    # legend.position = c(0.2,0.85),
+    # legend.text = element_text(size = 14),
+    # legend.title = element_blank(),
+    # legend.key.size = unit(2, "lines"),
+    # legend.background = element_rect( color = "black"),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
     axis.line = element_line(color = "black"),
     axis.ticks = element_line(color = "black"),
     axis.ticks.length = unit(0.25, "cm")
@@ -501,70 +501,70 @@ ggsave(plot_name, plot = PowerPlot, width = 8, height = 6,
 # --------------- Create plots for visualization of power composition in combined carving estimator --------------
 
 # -------- Create plots for visualization of power composition in combined carving estimator ---------
-#plot_name2 <- paste0("combined_plot_",filename,".png")
+plot_name2 <- paste0("combined_plot_",filename,".png")
 
 #Need those NA's to integrate posi at fraction 1
-# data_Power2 <- data.frame(
-#   Fraq = fraq.vec,
-#   "Combined Carving" = full_power_avg_D,
-#   "Data Splitting" = full_power_avg_split,
-#   "PoSI" = full_power_avg_posi_fraq
-#   )
-# 
-# FWER_points2 <- data.frame(
-#   Fraq = fraq.vec,
-#   "Combined Carving" = full_FWER_D,
-#   "Data Splitting" = full_FWER_split,
-#   "PoSI" = full_FWER_posi_fraq
-# )
-# 
-# # Convert data frames to long format
-# data_Power2_long <- tidyr::gather(data_Power2, "Type", "Value", -Fraq)
-# FWER_points2_long <- tidyr::gather(FWER_points2, "Type", "Value", -Fraq)
-# 
-# # Adjust fractions for points that overlap
-# FWER_points_adjusted2 <- FWER_points2_long %>%
-#   group_by(Fraq, Value) %>%
-#   mutate(
-#     adjust_right = ifelse(duplicated(Value), 0.001, 0),
-#     adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
-#     adjust_total = adjust_right + adjust_left,
-#     Fraq_adjusted = Fraq + adjust_total
-#   ) %>%
-#   ungroup()
-# 
-# PowerPlot2 <- ggplot(data_Power2_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
-#   geom_line(size = 1) +
-#   geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
-#   geom_point(data = FWER_points_adjusted2, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type),  size = 2.5, stroke = 1.2,alpha = 0.7) +
-#   labs(title = "m = 5, SNR = 2",
-#        x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
-#   theme_minimal() + 
-#   theme(
-#     plot.title = element_text(hjust = 0.5, size = 25),
-#     axis.title.x = element_text(size = 20),
-#     axis.title.y = element_text(size = 20),
-#     #legend.position = "none",
-#     legend.position = c(0.85,0.85),
-#     legend.text = element_text(size = 14),
-#     legend.title = element_blank(),
-#     legend.key.size = unit(2, "lines"),
-#     legend.background = element_rect( color = "black"),
-#     axis.text.x = element_text(size = 12),
-#     axis.text.y = element_text(size = 12),
-#     axis.line = element_line(color = "black"),
-#     axis.ticks = element_line(color = "black"),
-#     axis.ticks.length = unit(0.25, "cm")
-#   )+
-#   scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
-#   scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
-#   scale_linetype_manual(values = c("solid","dotdash", "longdash"))+
-#   scale_shape_manual(values = c(2, 3, 1))+
-#   guides(linetype = guide_legend(override.aes = list(size = 3,alpha = 0.5)))
-# 
-# print(PowerPlot2)
-# ggsave(plot_name2, plot = PowerPlot2, width = 8, height = 6,
-#        units = "in", dpi = 300, bg = "#F0F0F0")
+data_Power2 <- data.frame(
+  Fraq = fraq.vec,
+  "Combined Carving" = full_power_avg_D,
+  "Data Splitting" = full_power_avg_split,
+  "PoSI" = full_power_avg_posi_fraq
+  )
+
+FWER_points2 <- data.frame(
+  Fraq = fraq.vec,
+  "Combined Carving" = full_FWER_D,
+  "Data Splitting" = full_FWER_split,
+  "PoSI" = full_FWER_posi_fraq
+)
+
+# Convert data frames to long format
+data_Power2_long <- tidyr::gather(data_Power2, "Type", "Value", -Fraq)
+FWER_points2_long <- tidyr::gather(FWER_points2, "Type", "Value", -Fraq)
+
+# Adjust fractions for points that overlap
+FWER_points_adjusted2 <- FWER_points2_long %>%
+  group_by(Fraq, Value) %>%
+  mutate(
+    adjust_right = ifelse(duplicated(Value), 0.001, 0),
+    adjust_left = ifelse(duplicated(Value, fromLast = TRUE), -0.001, 0),
+    adjust_total = adjust_right + adjust_left,
+    Fraq_adjusted = Fraq + adjust_total
+  ) %>%
+  ungroup()
+
+PowerPlot2 <- ggplot(data_Power2_long, aes(x = Fraq, y = Value, color = Type, linetype = Type, shape = Type)) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = sig.level, color = "black", linetype = "dashed") +
+  geom_point(data = FWER_points_adjusted2, aes(x = Fraq_adjusted, y = Value, color = Type, shape = Type),  size = 2.5, stroke = 1.2,alpha = 0.7) +
+  labs(title = "m = 5, SNR = 2",
+       x = "Fractions used for selection", y = "Average power(-) and FWER(o)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 25),
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    #legend.position = "none",
+    legend.position = c(0.85,0.85),
+    legend.text = element_text(size = 14),
+    legend.title = element_blank(),
+    legend.key.size = unit(2, "lines"),
+    legend.background = element_rect( color = "black"),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    axis.ticks.length = unit(0.25, "cm")
+  )+
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  scale_x_continuous(breaks = seq(0.5, 1, by = 0.1), limits = c(0.5, 1)) +
+  scale_linetype_manual(values = c("solid","dotdash", "longdash"))+
+  scale_shape_manual(values = c(2, 4, 1))+
+  guides(linetype = guide_legend(override.aes = list(size = 3,alpha = 0.5)))
+
+print(PowerPlot2)
+ggsave(plot_name2, plot = PowerPlot2, width = 8, height = 6,
+       units = "in", dpi = 300, bg = "#F0F0F0")
 
 
 

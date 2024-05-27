@@ -47,8 +47,8 @@ rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.5, 0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
-fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+#fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -66,10 +66,10 @@ sigma_squ <- drop(var(y.true)) / SNR
 sigma <- sqrt(sigma_squ)
 #sigma_squ = 1
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 30
+nsim <- 300
 sig.level <- 0.05
-flexible_selection  <- TRUE #should we allow more selections for data splitting approach
-flexible_selection_count <- 5
+flexible_selection  <- FALSE #should we allow more selections for data splitting approach
+flexible_selection_count <- 0
 
 
 total.time <- 0
@@ -155,7 +155,7 @@ for(fraq_ind in  1:f){
   set.seed(seed.vec[seed.n])
   
   opts <- list(progress = progress)
-  cl<-makeSOCKcluster(12) 
+  cl<-makeSOCKcluster(6) 
   rseed <- seed.vec[seed.n]
   clusterSetRNGStream(cl, iseed = rseed) #make things reproducible
   registerDoSNOW(cl)
@@ -502,11 +502,11 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
     axis.title.x = element_text(size = 20),
     axis.title.y = element_text(size = 20),
     #legend.position = "none",
-    legend.position = c(0.85,0.85),
+    #legend.position = c(0.85,0.85),
     legend.text = element_text(size = 14),
     legend.title = element_blank(),
     legend.key.size = unit(2, "lines"),
-    legend.background = element_rect( color = "black"),
+    #legend.background = element_rect( color = "black"),
     axis.text.x = element_text(size = 12),
     axis.text.y = element_text(size = 12),
     axis.line = element_line(color = "black"),

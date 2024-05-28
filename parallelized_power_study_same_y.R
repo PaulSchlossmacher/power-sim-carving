@@ -47,8 +47,8 @@ rho <- 0.6
 #fraq.vec <- c(0.5,0.6,0.7)
 #fraq.vec <- c(0.7,0.8,0.9,0.95)
 #fraq.vec <- c(0.5, 0.9)
-#fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
-fraq.vec <- c(0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
+#fraq.vec <- c(0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -66,7 +66,7 @@ sigma_squ <- drop(var(y.true)) / SNR
 sigma <- sqrt(sigma_squ)
 #sigma_squ = 1
 #sigma_squ <- 2 #variance used in some other simulations without fixing SNR
-nsim <- 30
+nsim <- 300
 sig.level <- 0.05
 flexible_selection  <- TRUE #should we allow more selections for data splitting approach
 flexible_selection_count <- 5
@@ -161,165 +161,163 @@ for(fraq_ind in  1:f){
   registerDoSNOW(cl)
   tic()
   #start parallel computation
-  results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE, 
-                     .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc", 
+  results <- foreach(i = 1:nsim,.combine = 'rbind', .multicombine = TRUE,
+                     .packages = c("MASS", "mvtnorm", "glmnet", "Matrix", "tictoc",
                                    "hdi", "selectiveInference", "truncnorm"), .options.snow = opts) %dorng%{
-                                     #get different selection events
-                                     logs <- c()
-                                     select.again <- TRUE
-                                     empty_model <- FALSE
-                                     splitting_estimator_failed <- FALSE
-                                     flexible_selection_par <- flexible_selection#Should be reset before every round
-                                     select.again.counter = 0
-                                     
-                                     #Moved the generation of y outside of the select.again procedure
-                                     y <- y.true + sqrt(sigma_squ) * rnorm(n)
-                                     #Normalize y:
-                                     y<-(y-mean(y))
-                                     
-                                     #Split and selection event for all estimators
-                                     split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-                                     beta_tmp <- split.select.list$beta
-                                     if(sum(beta_tmp!=0)==0){
-                                       empty_model <- TRUE
-                                       p_vals_D_fwer <- rep(1,p)
-                                       p_vals_C_fwer <- rep(1,p)
-                                       p_vals_posi_fraq_fwer <- rep(1,p)
-                                       p_vals_split_fwer <- rep(1,p)
-                                       p_vals_sat_fwer <- rep(1,p)
-                                       logs <- c(logs,"0 variables where chosen by the lasso, but thats not a problem.")
-                                     }
-                                     lambda <- split.select.list$lambda
-                                     split <- split.select.list$split
-                                     
-                                     split.select.list_comb =split.select.list
-                                     beta_tmp_comb = beta_tmp
-                                     lambda_comb =  lambda
-                                     split_comb = split
-                                     
-                                     #While loop for combined estimator, if splitting fails
-                                     while(sum(beta_tmp_comb!=0)>n*(1-fraq.vec[fraq_ind]) &
-                                           select.again.counter < flexible_selection_count &
-                                           empty_model == FALSE &
-                                           flexible_selection_par == TRUE){
-                                       select.again.counter=select.again.counter+1
-                                       
-                                       split.select.list_comb <- split.select(x,y,fraction = fraq.vec[fraq_ind])
-                                       beta_tmp_comb <- split.select.list_comb$beta
-                                       lambda_comb <- split.select.list_comb$lambda
-                                       split_comb <- split.select.list_comb$split
-                                     }
-                                     
-                                     #If splitting fails more often than allowed, we set the corresponding variable to TRUE
-                                     if (sum(beta_tmp_comb!=0)>n*(1-fraq.vec[fraq_ind]) &
-                                         select.again.counter >= flexible_selection_count &
-                                         empty_model == FALSE &
-                                         flexible_selection_par == TRUE){
-                                       p_vals_D_fwer <- rep(1,p)
-                                       p_vals_posi_fraq_fwer <- rep(1,p)
-                                       p_vals_split_fwer <- rep(1,p)
-                                       splitting_estimator_failed = TRUE
-                                     }
-                                     
-                                     empty_model_comb=FALSE
-                                     
-                                     if(sum(beta_tmp_comb!=0)==0 &
-                                        splitting_estimator_failed==FALSE &
-                                        empty_model ==FALSE){
-                                       empty_model_comb <- TRUE
-                                       p_vals_D_fwer <- rep(1,p)
-                                       p_vals_posi_fraq_fwer <- rep(1,p)
-                                       p_vals_split_fwer <- rep(1,p)
-                                       logs <- c(logs,"0 variables where chosen by the lasso for the combined estimator,
-                but thats not a problem.")
-                                     }
-                                     
-                                     if(!empty_model && !splitting_estimator_failed && !empty_model_comb){
-                                       #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
-                                       carve_D <-carve.comb(x,y,split = split_comb, beta = beta_tmp_comb, lambda = lambda_comb, sigma_squ=sigma_squ)
-                                       p_vals_D_nofwer <- carve_D$pvals
-                                       
-                                       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
-                                                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
-                                       p_vals_C_nofwer<-carve_C$pv
-                                       
-                                       #Note: selected=FALSE for saturated model
-                                       carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
-                                                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
-                                       p_vals_sat_nofwer<-carve_sat$pv
-                                       
-                                       p_vals_split_nofwer <- beta.split(x, y, split=split_comb, beta=beta_tmp_comb, sigma_squ=sigma_squ)$pvals_split
-                                       
-                                       p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split_comb, beta=beta_tmp_comb,lambda=lambda_comb, sigma_squ=sigma_squ)$pvals
-                                       
-                                       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
-                                       p_vals_comp_C<-rep(1,p)
-                                       chosen <- which(abs(beta_tmp)>0)
-                                       p_vals_comp_C[chosen] <- p_vals_C_nofwer
-                                       p_vals_comp_sat<-rep(1,p)
-                                       p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
-                                       
-                                       #Add FWER control with Bonferroni correction
-                                       model.size <- length(chosen)
-                                       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
-                                       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
-                                       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
-                                       p_vals_posi_fraq_fwer <- pmin(p_vals_posi_fraq_nofwer*model.size,1)
-                                       p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
-                                       
-                                     }
-                                     #If carving p_vals can be computed, but comb can't either because of failure or because 
-                                     # of an empty model for comb
-                                     # In these cases the p_vals of comb have already been calculated above.
-                                     else if(!empty_model & (splitting_estimator_failed==TRUE | empty_model_comb==TRUE)){
-                                       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
-                                                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
-                                       p_vals_C_nofwer<-carve_C$pv
-                                       
-                                       carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
-                                                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
-                                       p_vals_sat_nofwer<-carve_sat$pv
-                                       
-                                       p_vals_comp_C<-rep(1,p)
-                                       chosen <- which(abs(beta_tmp)>0)
-                                       p_vals_comp_C[chosen] <- p_vals_C_nofwer
-                                       
-                                       p_vals_comp_sat<-rep(1,p)
-                                       p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
-                                       
-                                       #Add FWER control with Bonferroni correction
-                                       model.size <- length(chosen)
-                                       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
-                                       p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
-                                     }
-                                     
-                                     #new selection event on all of the data for posi
-                                     split.select.list.posi <- split.select(x,y,fraction = 1)
-                                     beta_tmp_posi <- split.select.list.posi$beta
-                                     lambda.posi <- split.select.list.posi$lambda
-                                     split.posi <- split.select.list.posi$split
-                                     chosen.posi <- which(abs(beta_tmp_posi)>0)
-                                     model.size.posi <- length(chosen.posi)
-                                     #handle empty model
-                                     if(sum(beta_tmp_posi!=0)==0){
-                                       p_vals_posi_fwer <- rep(1,p)
-                                     }
-                                     else{
-                                       p_vals_posi_nofwer = beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma_squ=sigma_squ)$pvals
-                                       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size.posi,1)
-                                       
-                                     }
-                                     
-                                     list(p_vals_D_fwer = p_vals_D_fwer, 
-                                          p_vals_C_fwer = p_vals_C_fwer,
-                                          p_vals_sat_fwer = p_vals_sat_fwer,
-                                          p_vals_split_fwer = p_vals_split_fwer,
-                                          p_vals_posi_fwer = p_vals_posi_fwer,
-                                          p_vals_posi_fraq_fwer = p_vals_posi_fraq_fwer,
-                                          select.again.counter = select.again.counter,
-                                          logs = logs)
-                                     
-                                   }
+
+     #get different selection events
+     logs <- c()
+     select.again <- TRUE
+     empty_model <- FALSE
+     empty_model_comb <- FALSE
+     splitting_estimator_failed <- FALSE
+     flexible_selection_par <- flexible_selection#Should be reset before every round
+     select.again.counter <- 0
+     
+     #Moved the generation of y outside of the select.again procedure
+     y <- y.true + sqrt(sigma_squ) * rnorm(n)
+     #Normalize y:
+     y<-(y-mean(y))
+     
+     #Split and selection event for all estimators
+     split.select.list <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+     beta_tmp <- split.select.list$beta
+     if(sum(beta_tmp!=0)==0){
+       empty_model <- TRUE
+       p_vals_D_fwer <- rep(1,p)
+       p_vals_C_fwer <- rep(1,p)
+       p_vals_posi_fraq_fwer <- rep(1,p)
+       p_vals_split_fwer <- rep(1,p)
+       p_vals_sat_fwer <- rep(1,p)
+       logs <- c(logs,"0 variables where chosen by the lasso, but thats not a problem.")
+     }
+     lambda <- split.select.list$lambda
+     split <- split.select.list$split
+     split.select.list_comb <- split.select.list
+     beta_tmp_comb <- beta_tmp
+     lambda_comb <- lambda
+     split_comb <- split
+     
+     if (flexible_selection_par && !empty_model){
+
+       #While loop for combined estimator, if splitting fails
+       while(sum(beta_tmp_comb!=0)>n*(1-fraq.vec[fraq_ind]) && select.again.counter < flexible_selection_count){
+         select.again.counter=select.again.counter+1
+
+         split.select.list_comb <- split.select(x,y,fraction = fraq.vec[fraq_ind])
+         beta_tmp_comb <- split.select.list_comb$beta
+         lambda_comb <- split.select.list_comb$lambda
+         split_comb <- split.select.list_comb$split
+       }
+
+       #If splitting fails more often than allowed, we set the corresponding variable to TRUE
+       if (sum(beta_tmp_comb!=0)>n*(1-fraq.vec[fraq_ind]) && select.again.counter >= flexible_selection_count){
+         p_vals_D_fwer <- rep(1,p)
+         p_vals_posi_fraq_fwer <- rep(1,p)
+         p_vals_split_fwer <- rep(1,p)
+         splitting_estimator_failed <- TRUE
+       }
+
+       if(sum(beta_tmp_comb!=0)==0 && !splitting_estimator_failed){
+         empty_model_comb <- TRUE
+         p_vals_D_fwer <- rep(1,p)
+         p_vals_posi_fraq_fwer <- rep(1,p)
+         p_vals_split_fwer <- rep(1,p)
+         logs <- c(logs,"0 variables where chosen by the lasso for the combined estimator,but thats not a problem.")
+       }
+     }else if(sum(beta_tmp_comb!=0)>n*(1-fraq.vec[fraq_ind])){
+       #Case where we dont want flexible selection but carve.comb is not well defined
+       p_vals_D_fwer <- rep(1,p)
+       p_vals_posi_fraq_fwer <- rep(1,p)
+       p_vals_split_fwer <- rep(1,p)
+       splitting_estimator_failed <- TRUE
+     }
+     
+     if(!empty_model && !splitting_estimator_failed && !empty_model_comb){
+       #Compute pure p-values from combined carving estimator, carving estimator and regular splitting approach
+       carve_D <-carve.comb(x,y,split = split_comb, beta = beta_tmp_comb, lambda = lambda_comb, sigma_squ=sigma_squ)
+       p_vals_D_nofwer <- carve_D$pvals
+
+       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
+                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+       p_vals_C_nofwer<-carve_C$pv
+
+       #Note: selected=FALSE for saturated model
+       carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
+                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
+       p_vals_sat_nofwer<-carve_sat$pv
+
+       p_vals_split_nofwer <- beta.split(x, y, split=split_comb, beta=beta_tmp_comb, sigma_squ=sigma_squ)$pvals_split
+
+       p_vals_posi_fraq_nofwer <- beta.posi(x, y, split=split_comb, beta=beta_tmp_comb,lambda=lambda_comb, sigma_squ=sigma_squ)$pvals
+
+       #carve_C only returns the p-values of the coefficients determined by the selection event, hence we assign them at the appropriate positions
+       p_vals_comp_C<-rep(1,p)
+       chosen <- which(abs(beta_tmp)>0)
+       p_vals_comp_C[chosen] <- p_vals_C_nofwer
+       p_vals_comp_sat<-rep(1,p)
+       p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
+
+       #Add FWER control with Bonferroni correction
+       model.size <- length(chosen)
+       p_vals_D_fwer <- pmin(p_vals_D_nofwer * model.size, 1)
+       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+       p_vals_split_fwer <- pmin(p_vals_split_nofwer*model.size,1)
+       p_vals_posi_fraq_fwer <- pmin(p_vals_posi_fraq_nofwer*model.size,1)
+       p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
+
+     }else if(!empty_model && (splitting_estimator_failed || empty_model_comb)){
+       #If carving p_vals can be computed, but carve.comb can't either because of failure or because
+       # of an empty model for comb
+       # In these cases the p_vals of comb have already been calculated above.
+       carve_C <- carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
+                              lambda = lambda,FWER = FALSE, intercept = FALSE,selected=TRUE, verbose = FALSE)
+       p_vals_C_nofwer<-carve_C$pv
+
+       carve_sat <-carve.lasso(X = x, y = y, ind = split, beta = beta_tmp, tol.beta = 0, sigma = sigma,
+                               lambda = lambda,FWER = FALSE, intercept = FALSE, selected=FALSE, verbose = FALSE)
+       p_vals_sat_nofwer<-carve_sat$pv
+
+       p_vals_comp_C<-rep(1,p)
+       chosen <- which(abs(beta_tmp)>0)
+       p_vals_comp_C[chosen] <- p_vals_C_nofwer
+
+       p_vals_comp_sat<-rep(1,p)
+       p_vals_comp_sat[chosen] <- p_vals_sat_nofwer
+
+       #Add FWER control with Bonferroni correction
+       model.size <- length(chosen)
+       p_vals_C_fwer <- pmin(p_vals_comp_C * model.size, 1)
+       p_vals_sat_fwer <- pmin(p_vals_comp_sat*model.size,1)
+     }
+     
+     #new selection event on all of the data for posi
+     split.select.list.posi <- split.select(x,y,fraction = 1)
+     beta_tmp_posi <- split.select.list.posi$beta
+     lambda.posi <- split.select.list.posi$lambda
+     split.posi <- split.select.list.posi$split
+     chosen.posi <- which(abs(beta_tmp_posi)>0)
+     model.size.posi <- length(chosen.posi)
+     #handle empty model
+     if(sum(beta_tmp_posi!=0)==0){
+       p_vals_posi_fwer <- rep(1,p)
+     }
+     else{
+       p_vals_posi_nofwer <- beta.posi(x, y, split=split.posi, beta=beta_tmp_posi,lambda=lambda.posi, sigma_squ=sigma_squ)$pvals
+       p_vals_posi_fwer <- pmin(p_vals_posi_nofwer*model.size.posi,1)
+       
+     }
+     
+     list(p_vals_D_fwer = p_vals_D_fwer, 
+          p_vals_C_fwer = p_vals_C_fwer,
+          p_vals_sat_fwer = p_vals_sat_fwer,
+          p_vals_split_fwer = p_vals_split_fwer,
+          p_vals_posi_fwer = p_vals_posi_fwer,
+          p_vals_posi_fraq_fwer = p_vals_posi_fraq_fwer,
+          select.again.counter = select.again.counter,
+          logs = logs)
+     
+   }
   toc()
   stopCluster(cl)
   
@@ -444,8 +442,8 @@ filename <- sub("\\.", ",", filename)
 environment_name <- paste0("Environment_",filename,".RData")
 plot_name <- paste0("main_plot_",filename,".png")
 save.image(file=environment_name)
-#load("simulation_environments/Environment_s=5_SNR=2.RData")
-
+#load("paper_environments/Environment_m=5_SNR=2.RData")
+#load("Environment_m=5_SNR=2_allowed_fails.RData")
 
 # --------------- Create main power plots --------------
 if (flexible_selection){
@@ -502,13 +500,13 @@ PowerPlot <- ggplot(data_Power_long, aes(x = Fraq, y = Value, color = Type, line
     axis.title.x = element_text(size = 20),
     axis.title.y = element_text(size = 20),
     #legend.position = "none",
-    legend.position = c(0.85,0.85),
+    legend.position = c(0.2,0.85),
     legend.text = element_text(size = 14),
     legend.title = element_blank(),
     legend.key.size = unit(2, "lines"),
     legend.background = element_rect( color = "black"),
-    axis.text.x = element_text(size = 12),
-    axis.text.y = element_text(size = 12),
+    axis.text.x = element_text(size = 15),
+    axis.text.y = element_text(size = 15),
     axis.line = element_line(color = "black"),
     axis.ticks = element_line(color = "black"),
     axis.ticks.length = unit(0.25, "cm")
@@ -577,8 +575,8 @@ ggsave(plot_name, plot = PowerPlot, width = 8, height = 6,
 #     legend.title = element_blank(),
 #     legend.key.size = unit(2, "lines"),
 #     legend.background = element_rect( color = "black"),
-#     axis.text.x = element_text(size = 12),
-#     axis.text.y = element_text(size = 12),
+#     axis.text.x = element_text(size = 15),
+#     axis.text.y = element_text(size = 15),
 #     axis.line = element_line(color = "black"),
 #     axis.ticks = element_line(color = "black"),
 #     axis.ticks.length = unit(0.25, "cm")

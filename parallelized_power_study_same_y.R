@@ -44,11 +44,7 @@ source(carve_combined_path)
 n <- 100
 p <- 200
 rho <- 0.6
-#fraq.vec <- c(0.5,0.6,0.7)
-#fraq.vec <- c(0.7,0.8,0.9,0.95)
-#fraq.vec <- c(0.5, 0.9)
 fraq.vec <- c(0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99)
-#fraq.vec <- c(0.7)
 #toeplitz takes the first column of the desired toeplitz design and creates the whole function, here a sequence from 0 to p-1
 Cov <- toeplitz(rho ^ (seq(0, p - 1)))
 #sel.index <- c(1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70)#active predictors
@@ -56,16 +52,13 @@ sel.index <- c(1,5,10,15,20)
 sparsity <- length(sel.index)
 beta <- rep(0, p)
 beta[sel.index] <- 1
-#RNGkind("Mersenne-Twister")#If we run multiple simulations in same R session, set this to true
 set.seed(42) 
 x <- mvrnorm(n, rep(0, p), Cov)#sample X from multivariate normal distribution
 y.true <- x %*% beta
-#SNR = 4
 SNR <- 2
+#SNR <- 1.5
 sigma_squ <- drop(var(y.true)) / SNR
 sigma <- sqrt(sigma_squ)
-#sigma_squ = 1
-#sigma_squ <- 2 #variance used in some other simulations without fixing SNR
 nsim <- 300
 sig.level <- 0.05
 flexible_selection  <- TRUE #should we allow more selections for data splitting approach
@@ -443,7 +436,6 @@ environment_name <- paste0("Environment_",filename,".RData")
 plot_name <- paste0("main_plot_",filename,".png")
 save.image(file=environment_name)
 #load("paper_environments/Environment_m=5_SNR=2.RData")
-#load("Environment_m=5_SNR=2_allowed_fails.RData")
 
 # --------------- Create main power plots --------------
 if (flexible_selection){

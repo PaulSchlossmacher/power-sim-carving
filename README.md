@@ -3,7 +3,7 @@ This project is comparing the carving estimator used in "Multicarving for high-d
 
 ## Content
 * Multicarving_paper: Whole repository obtained from https://github.com/cschultheiss/Multicarving, implementing the multicarving procedure
-* carve_linear: Implementation of the carving estimator presented by Erik Drysdale in his paper
+* carve_combined: Implementation of the carving estimator presented by Erik Drysdale in his paper, as well as PoSI estimator from the paper written by Lee et al. (https://arxiv.org/pdf/1311.6238) and data splitting.
 * SNTN_distribution: CDF and PDF of a sum of normal and truncated normal distribution following again Erik Drysdale
 * SNTN_visualization: Plots an example CDF and PDF of the sntn distribution
 * split_select: This is exactly the "one.split" function extracted from "multi.carve" in "Multicarving Christoph". Performs Lasso selection while ensuring correct conditions for carving procedure.
